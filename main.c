@@ -64,6 +64,10 @@ __asm__(
     ".incbin \"frames.bin\"\n"
     ".global frames_end\nframes_end:\n"
     ".balign 4\n"
+    ".global frames_idx_start\nframes_idx_start:\n"
+    ".incbin \"frames_idx.bin\"\n"
+    ".global frames_idx_end\nframes_idx_end:\n"
+    ".balign 4\n"
     ".global palette_data\npalette_data:\n"
     ".incbin \"palette.bin\"\n"
     ".balign 4\n"
@@ -87,6 +91,10 @@ __asm__(
     ".incbin \"vid2_frames.bin\"\n"
     ".global vid2_frames_end\nvid2_frames_end:\n"
     ".balign 4\n"
+    ".global vid2_frames_idx_start\nvid2_frames_idx_start:\n"
+    ".incbin \"vid2_frames_idx.bin\"\n"
+    ".global vid2_frames_idx_end\nvid2_frames_idx_end:\n"
+    ".balign 4\n"
     ".global vid2_palette_data\nvid2_palette_data:\n"
     ".incbin \"vid2_palette.bin\"\n"
     ".balign 4\n"
@@ -97,6 +105,7 @@ __asm__(
     ".text\n"
 );
 extern const u8  frames_start[], frames_end[];
+extern const u32 frames_idx_start[], frames_idx_end[];
 extern const u16 palette_data[256];
 extern const u8  audio_start[], audio_end[];
 extern const u16 menu_bg[19200];
@@ -104,6 +113,7 @@ extern const u16 menu_pal[256];
 extern const u16 secret_bg[19200];
 extern const u16 secret_pal[256];
 extern const u8  vid2_frames_start[], vid2_frames_end[];
+extern const u32 vid2_frames_idx_start[], vid2_frames_idx_end[];
 extern const u16 vid2_palette_data[256];
 extern const u8  vid2_audio_start[], vid2_audio_end[];
 #define VID2_NCHUNKS ((u32)(vid2_audio_end - vid2_audio_start) / (SAMPLES_PER_CHUNK / 2))   /* derived from vid2_audio.bin */
@@ -166,6 +176,21 @@ static void irq_handler(void) {
         }
     }
     REG_IF = flags;
+}
+
+/* Frames are stored RLE-compressed (run,value byte pairs; run 1-255) since the raw
+   8160 bytes/frame would not fit a long video in 32 MB. idx[f]..idx[f+1] bounds the
+   compressed bytes for frame f in the stream starting at comp. Decoded into a scratch
+   buffer, then drawn exactly as before. */
+static u8 frame_buf[FRAME_BYTES];
+
+static void decode_frame(const u8 *comp, u32 off, u32 end) {
+    const u8 *p = comp + off, *stop = comp + end;
+    u8 *out = frame_buf, *out_end = frame_buf + FRAME_BYTES;
+    while (p < stop && out < out_end) {
+        u8 run = *p++, val = *p++;
+        for (u8 i = 0; i < run && out < out_end; i++) *out++ = val;
+    }
 }
 
 /* Draw a 120x68 frame doubled to 240x136 into Mode 4 VRAM, centred. */
@@ -344,7 +369,7 @@ static void controls(void) {
 }
 
 static u32 chapter_tick(int p) {
-    unsigned count = (unsigned)(frames_end - frames_start) / FRAME_BYTES;
+    unsigned count = (unsigned)(frames_idx_end - frames_idx_start) - 1;
     u32 f = count * p / 3;
     u32 t = ((f << 16) + 5485u) / 5486u;
     t &= ~1u;
@@ -386,7 +411,7 @@ static void stop_audio(void) {
 
 #define SEEK_STEP 4                         /* ticks (vblanks) per frame while seeking = 4x speed */
 
-static void play_generic(u32 st, const u8 *fr_start, const u8 *fr_end,
+static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned count,
                           const u16 *pal, const u8 *audio_base, u32 nchunks) {
     REG_IME = 0;
     for (int i = 0; i < 256; i++) PALETTE[i] = pal[i];
@@ -394,7 +419,6 @@ static void play_generic(u32 st, const u8 *fr_start, const u8 *fr_end,
     for (int i = 0; i < 128; i++) OAM[i * 4] = 0x200;
     REG_DISPCNT = 4 | (1 << 10);
 
-    unsigned count = (unsigned)(fr_end - fr_start) / FRAME_BYTES;
     u32 maxpos = ((u32)count << 16) / 5486u;
     if (maxpos > nchunks * 2 - 2) maxpos = nchunks * 2 - 2;
     maxpos &= ~1u;
@@ -454,8 +478,8 @@ static void play_generic(u32 st, const u8 *fr_start, const u8 *fr_end,
         unsigned f = (t * 5486u) >> 16;
         if (f >= count) f = count - 1;
         if ((int)f != drawn) {
-            draw_frame(fr_start + f * FRAME_BYTES,
-                       page ? VRAM_PAGE0 : VRAM_PAGE1);
+            decode_frame(fr_start, idx[f], idx[f + 1]);
+            draw_frame(frame_buf, page ? VRAM_PAGE0 : VRAM_PAGE1);
             drawn = (int)f;
             pending = 1;
         }
@@ -466,12 +490,14 @@ static void play_generic(u32 st, const u8 *fr_start, const u8 *fr_end,
 }
 
 static void play(u32 st) {
-    play_generic(st, frames_start, frames_end, palette_data, audio_start, NCHUNKS);
+    unsigned count = (unsigned)(frames_idx_end - frames_idx_start) - 1;
+    play_generic(st, frames_start, frames_idx_start, count, palette_data, audio_start, NCHUNKS);
 }
 
 /* Second (hidden) video, triggered by the alternate Konami code (D D U U L R L R B A). */
 static void play_vid2(void) {
-    play_generic(0, vid2_frames_start, vid2_frames_end, vid2_palette_data,
+    unsigned count = (unsigned)(vid2_frames_idx_end - vid2_frames_idx_start) - 1;
+    play_generic(0, vid2_frames_start, vid2_frames_idx_start, count, vid2_palette_data,
                  vid2_audio_start, VID2_NCHUNKS);
 }
 
