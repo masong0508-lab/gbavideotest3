@@ -122,10 +122,13 @@ extern const u8  vid2_audio_start[], vid2_audio_end[];
 
 /* ---- audio state ---- */
 static s8 abuf[2][SAMPLES_PER_CHUNK] __attribute__((aligned(4)));
-static volatile u32 tick;          /* vblank counter, reset when the loop restarts */
+static volatile u32 tick;          /* vblank counter: drives video position, reset when the loop restarts */
+static volatile u32 achunk_ctr;    /* vblanks since the last audio chunk boundary */
 static volatile u32 started;       /* chunks started so far in this loop */
 static volatile u32 fill_needed;
 static volatile u32 play_idx;      /* buffer to start at the next chunk boundary */
+static volatile u32 g_vb_per_chunk;   /* vblanks per audio chunk: 2 normal, 4 for a half-rate stream */
+static volatile u16 g_timer_reload;   /* TM0CNT_L reload matching g_vb_per_chunk */
 
 static const u8 *ap;
 static int pred, sidx;
@@ -163,14 +166,16 @@ static void irq_handler(void) {
     u16 flags = REG_IF;
     if (flags & 1) {
         tick++;
-        if (tick & 1) {                       /* every second vblank */
-            if (started == g_nchunks) { started = 0; tick = 1; }   /* loop */
+        achunk_ctr++;
+        if (achunk_ctr >= g_vb_per_chunk) {           /* one audio-chunk boundary */
+            achunk_ctr = 0;
+            if (started == g_nchunks) { started = 0; tick = 0; }   /* loop: resync video too */
             REG_DMA1CNT = 0;
             REG_TM0CNT_H = 0;
             REG_DMA1SAD = (u32)abuf[play_idx];
             REG_DMA1DAD = 0x040000A0;         /* FIFO A */
             REG_DMA1CNT = 0xB6400001;         /* fifo mode, 32-bit, repeat, enable */
-            REG_TM0CNT_L = 65536 - 1848;
+            REG_TM0CNT_L = g_timer_reload;
             REG_TM0CNT_H = 0x80;
             play_idx ^= 1;
             started++;
@@ -383,16 +388,18 @@ static u32 chapter_tick(int p) {
 /* Generalised player: plays any frame stream + palette + ADPCM audio stream
    in the same layout as the main video, so it can drive either the main
    feature or the easter-egg clip. */
-static void start_audio(u32 st, const u8 *audio_base, u32 nchunks) {
+static void start_audio(u32 st, const u8 *audio_base, u32 nchunks, u32 vb_per_chunk) {
     REG_IME = 0;
     REG_SOUNDCNT_X = 0x80;
     REG_SOUNDCNT_H = 0x0B04;
     g_audio_base = audio_base;
     g_nchunks = nchunks;
-    u32 c = st >> 1;
+    g_vb_per_chunk = vb_per_chunk;
+    g_timer_reload = (u16)(65536 - 1848 * (vb_per_chunk / 2));   /* half chunk-rate = half timer rate = half pitch */
+    u32 c = st / vb_per_chunk;
     dec = c; ap = audio_base + c * (SAMPLES_PER_CHUNK / 2);
     pred = 0; sidx = 0;
-    play_idx = 0; started = c; tick = st; fill_needed = 0;
+    play_idx = 0; started = c; tick = st; achunk_ctr = 0; fill_needed = 0;
     decode_chunk(abuf[0]);
     IRQ_VECTOR = (u32)irq_handler;
     REG_DISPSTAT = 8;
@@ -414,18 +421,23 @@ static void stop_audio(void) {
 #define SEEK_STEP 4                         /* ticks (vblanks) per frame while seeking = 4x speed */
 
 static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned count,
-                          const u16 *pal, const u8 *audio_base, u32 nchunks) {
+                          const u16 *pal, const u8 *audio_base, u32 nchunks, u32 rate) {
     REG_IME = 0;
     for (int i = 0; i < 256; i++) PALETTE[i] = pal[i];
     for (int i = 0; i < 19200; i++) VRAM_PAGE0[i] = 0;
     for (int i = 0; i < 128; i++) OAM[i * 4] = 0x200;
     REG_DISPCNT = 4 | (1 << 10);
 
-    u32 maxpos = ((u32)count << 16) / 5486u;
-    if (maxpos > nchunks * 2 - 2) maxpos = nchunks * 2 - 2;
-    maxpos &= ~1u;
+    /* rate 1 = normal (5fps, vblanks/chunk=2); rate 2 = half-speed playback (2.5fps
+       equivalent hold time, vblanks/chunk=4) for a stream whose source was sped up
+       2x before encoding - see README for how that trades quality for ROM space. */
+    u32 vbc = 2 * rate;
+    u32 fps_num = 5486u / rate;
+    u32 maxpos = ((u32)count << 16) / fps_num;
+    if (maxpos > nchunks * vbc - vbc) maxpos = nchunks * vbc - vbc;
+    maxpos &= ~(vbc - 1);
 
-    start_audio(st, audio_base, nchunks);
+    start_audio(st, audio_base, nchunks, vbc);
 
     u32 last = st, pos = st;
     int mode = 0;                           /* 0 play, 1 pause, 2 fast-forward, 3 rewind */
@@ -461,8 +473,8 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
         if (nm != mode) {
             if (mode == 0) { pos = t > maxpos ? maxpos : t; stop_audio(); }
             if (nm == 0) {                  /* resume: re-sync audio to the video position */
-                u32 s = pos & ~1u;
-                start_audio(s, audio_base, nchunks);
+                u32 s = pos & ~(vbc - 1);
+                start_audio(s, audio_base, nchunks, vbc);
                 last = s; t = s;
             }
             mode = nm;
@@ -477,7 +489,7 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
             fill_needed = 0;
             decode_chunk(abuf[play_idx]);
         }
-        unsigned f = (t * 5486u) >> 16;
+        unsigned f = (t * fps_num) >> 16;
         if (f >= count) f = count - 1;
         if ((int)f != drawn) {
             decode_frame(fr_start, idx[f], idx[f + 1]);
@@ -493,14 +505,20 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
 
 static void play(u32 st) {
     unsigned count = (unsigned)(frames_idx_end - frames_idx_start) - 1;
-    play_generic(st, frames_start, frames_idx_start, count, palette_data, audio_start, NCHUNKS);
+    play_generic(st, frames_start, frames_idx_start, count, palette_data, audio_start, NCHUNKS, 1);
 }
 
-/* Second (hidden) video, triggered by the alternate Konami code (D D U U L R L R B A). */
+/* Second (hidden) video, triggered by the alternate Konami code (D D U U L R L R B A).
+   Encoded from a 2x-sped-up source (half the frames, half the audio bytes for the same
+   real-world runtime), then played back at rate=2 here: half frame-rate (each frame held
+   twice as long) and half the audio timer rate (halves the sample rate, which stretches
+   duration 2x AND drops the pitch back an octave - undoing the speedup, not just the
+   duration change). Only correct if the source's audio was itself a naive resample
+   (pitch-shifted "chipmunk" speedup) rather than a pitch-preserving time-stretch. */
 static void play_vid2(void) {
     unsigned count = (unsigned)(vid2_frames_idx_end - vid2_frames_idx_start) - 1;
     play_generic(0, vid2_frames_start, vid2_frames_idx_start, count, vid2_palette_data,
-                 vid2_audio_start, VID2_NCHUNKS);
+                 vid2_audio_start, VID2_NCHUNKS, 2);
 }
 
 int main(void) {
