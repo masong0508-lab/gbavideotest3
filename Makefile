@@ -8,7 +8,7 @@ CFLAGS := -O2 -mthumb -mthumb-interwork -Wall
 
 all: $(TARGET).gba
 
-$(TARGET).elf: main.c frames.bin palette.bin audio.bin menu_bg.bin menu_pal.bin secret_bg.bin secret_pal.bin vid2_frames.bin vid2_palette.bin vid2_audio.bin
+$(TARGET).elf: main.c frames.bin frames_idx.bin palette.bin audio.bin menu_bg.bin menu_pal.bin secret_bg.bin secret_pal.bin vid2_frames.bin vid2_frames_idx.bin vid2_palette.bin vid2_audio.bin
 	$(CC) $(CFLAGS) -specs=gba.specs main.c -o $@
 
 $(TARGET).gba: $(TARGET).elf
