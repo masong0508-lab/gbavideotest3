@@ -151,6 +151,18 @@ def write(name, data):
     with open(os.path.join(ROOT, name), 'wb') as f: f.write(data)
     print(f'  wrote {name:16s} {len(data):>10,} bytes')
 
+GITHUB_FILE_LIMIT = 24 * 1024 * 1024   # stay safely under GitHub's 25MB single-file cap
+
+def write_frames_split(stem, data):
+    """Frame data is always written as <stem>1.bin + <stem>2.bin (matching the fixed
+    two-part .incbin pair in main.c), so no single file exceeds GitHub's 25MB cap.
+    Two 24MB parts cover up to 48MB, well beyond the 32MB ROM limit, so 2 is always
+    enough; part 2 is written even when empty so main.c's .incbin still finds it."""
+    p1 = data[:GITHUB_FILE_LIMIT]
+    p2 = data[GITHUB_FILE_LIMIT:]
+    write(f'{stem}1.bin', p1)
+    write(f'{stem}2.bin', p2)
+
 # ---------------------------------------------------------------- ffmpeg input
 def ffmpeg_frames(path, stretch):
     if stretch: vf = f'fps=5,scale={VID_W}:{VID_H}:flags=lanczos'
@@ -169,14 +181,14 @@ def ffmpeg_audio(path, gain):
     return np.frombuffer(r.stdout, dtype='<i2') if r.returncode == 0 else np.zeros(0, dtype=np.int16)
 
 # ---------------------------------------------------------------- commands
-SLOTS = {'main': ('frames.bin', 'frames_idx.bin', 'palette.bin', 'audio.bin'),
-         'secret': ('vid2_frames.bin', 'vid2_frames_idx.bin', 'vid2_palette.bin', 'vid2_audio.bin')}
+SLOTS = {'main': ('frames', 'frames_idx.bin', 'palette.bin', 'audio.bin'),
+         'secret': ('vid2_frames', 'vid2_frames_idx.bin', 'vid2_palette.bin', 'vid2_audio.bin')}
 
 def build_video(frames, pcm, slot, dither):
-    fname, iname, pname, aname = SLOTS[slot]
+    fstem, iname, pname, aname = SLOTS[slot]
     fb, ib, pb = encode_frames(frames, dither)
     ab = encode_audio(pcm, len(frames))
-    write(fname, fb); write(iname, ib); write(pname, pb); write(aname, ab)
+    write_frames_split(fstem, fb); write(iname, ib); write(pname, pb); write(aname, ab)
     secs = len(frames) / 5
     raw = len(frames) * FRAME_BYTES
     print(f'  {len(frames)} frames = {secs:.1f} s ({secs/60:.1f} min), {len(ab)//CHUNK_BYTES} audio chunks')
