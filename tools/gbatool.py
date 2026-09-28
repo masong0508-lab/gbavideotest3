@@ -102,8 +102,23 @@ def pal_rgb(img_p, count=256):
     flat = flat + [0] * (768 - len(flat))
     return [tuple(flat[i*3:i*3+3]) for i in range(count)]
 
+def rle_encode_frame(px):
+    """px: flat uint8 array of FRAME_BYTES palette indices -> RLE bytes (run,value pairs, run 1-255)."""
+    out = bytearray()
+    i = 0; n = len(px)
+    while i < n:
+        v = px[i]; j = i + 1
+        limit = min(n, i + 255)
+        while j < limit and px[j] == v: j += 1
+        out.append(j - i); out.append(int(v))
+        i = j
+    return bytes(out)
+
 def encode_frames(frames, dither):
-    """frames: list of 120x68 RGB PIL images -> (frames_bytes, palette_bytes). One shared palette."""
+    """frames: list of 120x68 RGB PIL images -> (frames_rle_bytes, index_bytes, palette_bytes).
+    Frames are RLE-compressed (run,value byte pairs) since raw indices don't fit a long video
+    in 32MB; index[] holds the byte offset of each frame in the compressed stream, index[n] =
+    total length, so main.c can seek to any frame without decoding the ones before it."""
     step = max(1, len(frames) // 64)
     sample = frames[::step][:64]
     cols = 8
@@ -114,10 +129,14 @@ def encode_frames(frames, dither):
     pal_img = sheet.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     d = Image.Dither.FLOYDSTEINBERG if dither else Image.Dither.NONE
     buf = bytearray()
+    offsets = [0]
     for f in frames:
         q = f.quantize(palette=pal_img, dither=d)
-        buf += np.asarray(q, dtype=np.uint8).tobytes()
-    return bytes(buf), bgr555(pal_rgb(pal_img))
+        px = np.asarray(q, dtype=np.uint8).reshape(-1)
+        buf += rle_encode_frame(px)
+        offsets.append(len(buf))
+    idx = struct.pack(f'<{len(offsets)}I', *offsets)
+    return bytes(buf), idx, bgr555(pal_rgb(pal_img))
 
 def encode_bg(img, dither):
     img = img.convert('RGB').resize((240, 160), Image.LANCZOS)
@@ -150,16 +169,18 @@ def ffmpeg_audio(path, gain):
     return np.frombuffer(r.stdout, dtype='<i2') if r.returncode == 0 else np.zeros(0, dtype=np.int16)
 
 # ---------------------------------------------------------------- commands
-SLOTS = {'main': ('frames.bin', 'palette.bin', 'audio.bin'),
-         'secret': ('vid2_frames.bin', 'vid2_palette.bin', 'vid2_audio.bin')}
+SLOTS = {'main': ('frames.bin', 'frames_idx.bin', 'palette.bin', 'audio.bin'),
+         'secret': ('vid2_frames.bin', 'vid2_frames_idx.bin', 'vid2_palette.bin', 'vid2_audio.bin')}
 
 def build_video(frames, pcm, slot, dither):
-    fname, pname, aname = SLOTS[slot]
-    fb, pb = encode_frames(frames, dither)
+    fname, iname, pname, aname = SLOTS[slot]
+    fb, ib, pb = encode_frames(frames, dither)
     ab = encode_audio(pcm, len(frames))
-    write(fname, fb); write(pname, pb); write(aname, ab)
+    write(fname, fb); write(iname, ib); write(pname, pb); write(aname, ab)
     secs = len(frames) / 5
+    raw = len(frames) * FRAME_BYTES
     print(f'  {len(frames)} frames = {secs:.1f} s ({secs/60:.1f} min), {len(ab)//CHUNK_BYTES} audio chunks')
+    print(f'  frame data: {len(fb):,} bytes RLE-compressed (was {raw:,} raw, {len(fb)/raw*100:.0f}%)')
 
 def cmd_video(a):
     frames = ffmpeg_frames(a.input, a.stretch)
