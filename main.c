@@ -76,6 +76,9 @@ __asm__(
     ".incbin \"audio.bin\"\n"
     ".global audio_end\naudio_end:\n"
     ".balign 4\n"
+    ".global audio_state\naudio_state:\n"
+    ".incbin \"audio_state.bin\"\n"
+    ".balign 4\n"
     ".global menu_bg\nmenu_bg:\n"
     ".incbin \"menu_bg.bin\"\n"
     ".balign 4\n"
@@ -104,6 +107,9 @@ __asm__(
     ".incbin \"vid2_audio.bin\"\n"
     ".global vid2_audio_end\nvid2_audio_end:\n"
     ".balign 4\n"
+    ".global vid2_audio_state\nvid2_audio_state:\n"
+    ".incbin \"vid2_audio_state.bin\"\n"
+    ".balign 4\n"
     ".global secret_audio_start\nsecret_audio_start:\n"
     ".incbin \"secret_audio.bin\"\n"
     ".global secret_audio_end\nsecret_audio_end:\n"
@@ -114,6 +120,8 @@ extern const u8  frames_start[], frames_end[];
 extern const u32 frames_idx_start[], frames_idx_end[];
 extern const u16 palette_data[256];
 extern const u8  audio_start[], audio_end[];
+extern const u32 audio_state[];          /* per-chunk ADPCM state: low 16 bits = predictor (s16), bits 16-23 = step index */
+extern const u32 vid2_audio_state[];
 extern const u8  menu_bg[3][19200];     /* 3 menu frames, shown 0,1,2,1,0,... ; 4 bits/pixel, low nibble = left pixel */
 extern const u16 menu_pal[3][16];       /* 16-colour palette per frame (254/255 are added at runtime) */
 
@@ -330,7 +338,7 @@ static void make_highlight(void) {
    vblank, so there is no black frame, fade or flicker).
    Picture: secret_bg.bin, 240x160 8-bit; colours 0..223 are the photo, 224..253 are
    filled in here at runtime with the water colours, 254/255 = black/white text. */
-static void start_audio(u32 st, const u8 *audio_base, u32 nchunks, u32 vb_per_chunk);
+static void start_audio(u32 st, const u8 *audio_base, u32 nchunks, u32 vb_per_chunk, const u32 *states);
 static void stop_audio(void);
 
 #define FADE_N 16                               /* fade steps; 1 vblank each */
@@ -537,7 +545,7 @@ static int secret(int menu_frame) {
 
     /* 3. music + fade in + waves, until the music ends */
     g_once = 1;
-    start_audio(0, secret_audio_start, SECRET_NCHUNKS, 2);
+    start_audio(0, secret_audio_start, SECRET_NCHUNKS, 2, 0);
     u32 last = 0, ldraw = 0;
     int page = 0, pending = 0, fade = 0;
     u16 prev = (u16)(~REG_KEYINPUT & 0x3FF);
@@ -683,7 +691,7 @@ static u32 chapter_tick(int p) {
 /* Generalised player: plays any frame stream + palette + ADPCM audio stream
    in the same layout as the main video, so it can drive either the main
    feature or the easter-egg clip. */
-static void start_audio(u32 st, const u8 *audio_base, u32 nchunks, u32 vb_per_chunk) {
+static void start_audio(u32 st, const u8 *audio_base, u32 nchunks, u32 vb_per_chunk, const u32 *states) {
     REG_IME = 0;
     REG_SOUNDCNT_X = 0x80;
     REG_SOUNDCNT_H = 0x0B04;
@@ -693,8 +701,15 @@ static void start_audio(u32 st, const u8 *audio_base, u32 nchunks, u32 vb_per_ch
     g_timer_reload = (u16)(65536 - 1848 * (vb_per_chunk / 2));   /* half chunk-rate = half timer rate = half pitch */
     u32 c = st / vb_per_chunk;
     dec = c; ap = audio_base + c * (SAMPLES_PER_CHUNK / 2);
-    pred = 0; sidx = 0;
-    play_idx = 0; started = c; tick = st; achunk_ctr = 0; fill_needed = 0; g_done = 0;
+    /* ADPCM only decodes correctly from the exact state it had at that point in the stream.
+       Restarting from (0,0) after a seek leaves the step size wrong for a very long time
+       (loud/quiet, distorted audio), so resume from the state saved for this chunk. */
+    if (states) { u32 sv = states[c]; pred = (short)(sv & 0xFFFF); sidx = (int)((sv >> 16) & 0xFF); }
+    else        { pred = 0; sidx = 0; }
+    /* With a state table (the videos), start the first chunk on the very next vblank instead of
+       waiting a whole chunk (2 vblanks, 4 for the half-rate video), which left audio late after
+       every resume. The jingle passes no table and keeps its original timing. */
+    play_idx = 0; started = c; tick = st; achunk_ctr = states ? vb_per_chunk - 1 : 0; fill_needed = 0; g_done = 0;
     decode_chunk(abuf[0]);
     IRQ_VECTOR = (u32)irq_handler;
     REG_DISPSTAT = 8;
@@ -717,7 +732,7 @@ static void stop_audio(void) {
 #define SEEK_STEP 4                         /* ticks (vblanks) per frame while seeking = 4x speed */
 
 static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned count,
-                          const u16 *pal, const u8 *audio_base, u32 nchunks, u32 rate) {
+                          const u16 *pal, const u8 *audio_base, u32 nchunks, u32 rate, const u32 *states) {
     REG_IME = 0;
     for (int i = 0; i < 256; i++) PALETTE[i] = pal[i];
     for (int i = 0; i < 19200; i++) VRAM_PAGE0[i] = 0;
@@ -733,7 +748,7 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
     if (maxpos > nchunks * vbc - vbc) maxpos = nchunks * vbc - vbc;
     maxpos &= ~(vbc - 1);
 
-    start_audio(st, audio_base, nchunks, vbc);
+    start_audio(st, audio_base, nchunks, vbc, states);
 
     u32 last = st, pos = st;
     int mode = 0;                           /* 0 play, 1 pause, 2 fast-forward, 3 rewind */
@@ -744,7 +759,7 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
     for (;;) {
         u32 t;
         if (mode == 0) {
-            while (tick == last) {}
+            while (tick == last) __asm__ volatile("swi 0x02" ::: "r0","r1","r2","r3","memory");   /* BIOS Halt: sleep until the vblank IRQ */
             t = tick;
             last = t;
         } else {
@@ -770,7 +785,7 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
             if (mode == 0) { pos = t > maxpos ? maxpos : t; stop_audio(); }
             if (nm == 0) {                  /* resume: re-sync audio to the video position */
                 u32 s = pos & ~(vbc - 1);
-                start_audio(s, audio_base, nchunks, vbc);
+                start_audio(s, audio_base, nchunks, vbc, states);
                 last = s; t = s;
             }
             mode = nm;
@@ -801,7 +816,7 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
 
 static void play(u32 st) {
     unsigned count = (unsigned)(frames_idx_end - frames_idx_start) - 1;
-    play_generic(st, frames_start, frames_idx_start, count, palette_data, audio_start, NCHUNKS, 1);
+    play_generic(st, frames_start, frames_idx_start, count, palette_data, audio_start, NCHUNKS, 1, audio_state);
 }
 
 /* Second (hidden) video, triggered by the alternate Konami code (D D U U L R L R B A).
@@ -814,7 +829,7 @@ static void play(u32 st) {
 static void play_vid2(void) {
     unsigned count = (unsigned)(vid2_frames_idx_end - vid2_frames_idx_start) - 1;
     play_generic(0, vid2_frames_start, vid2_frames_idx_start, count, vid2_palette_data,
-                 vid2_audio_start, VID2_NCHUNKS, 2);
+                 vid2_audio_start, VID2_NCHUNKS, 2, vid2_audio_state);
 }
 
 int main(void) {
