@@ -155,6 +155,8 @@ static volatile u32 g_vb_per_chunk;   /* vblanks per audio chunk: 2 normal, 4 fo
 static volatile u16 g_timer_reload;   /* TM0CNT_L reload matching g_vb_per_chunk */
 static volatile u32 g_once;           /* 1 = play the stream once instead of looping (secret screen) */
 static volatile u32 g_done;           /* set by the IRQ at the exact vblank the one-shot stream ends */
+static volatile u32 g_irq_decode;     /* 1 = the IRQ decodes the next audio chunk itself (videos); 0 = main loop does it (jingle) */
+static void decode_chunk(s8 *out);
 
 static const u8 *ap;
 static int pred, sidx;
@@ -210,7 +212,8 @@ static void irq_handler(void) {
                 REG_TM0CNT_H = 0x80;
                 play_idx ^= 1;
                 started++;
-                fill_needed = 1;
+                if (g_irq_decode) decode_chunk(abuf[play_idx]);   /* refill right here: never depends on the main loop being free */
+                else fill_needed = 1;
             }
         }
     }
@@ -235,13 +238,14 @@ static void decode_frame(const u8 *comp, u32 off, u32 end) {
 /* Draw a 120x68 frame doubled to 240x136 into Mode 4 VRAM, centred. */
 static void draw_frame(const u8 *src, volatile u16 *dst) {
     for (int y = 0; y < VID_H; y++) {
-        volatile u16 *row0 = dst + (Y_OFFSET + y * 2) * 120;
-        volatile u16 *row1 = row0 + 120;
-        for (int x = 0; x < VID_W; x++) {
-            u16 p = src[y * VID_W + x];
-            u16 pair = (u16)((p << 8) | p);
-            row0[x] = pair;
-            row1[x] = pair;
+        volatile u32 *row0 = (volatile u32 *)(dst + (Y_OFFSET + y * 2) * 120);
+        volatile u32 *row1 = row0 + 60;
+        const u8 *s = src + y * VID_W;
+        for (int x = 0; x < VID_W; x += 2) {
+            u32 a = s[x], b = s[x + 1];
+            u32 w = a | (a << 8) | (b << 16) | (b << 24);     /* 2 source pixels -> 4 VRAM bytes */
+            row0[x >> 1] = w;
+            row1[x >> 1] = w;
         }
     }
 }
@@ -710,6 +714,7 @@ static void start_audio(u32 st, const u8 *audio_base, u32 nchunks, u32 vb_per_ch
        waiting a whole chunk (2 vblanks, 4 for the half-rate video), which left audio late after
        every resume. The jingle passes no table and keeps its original timing. */
     play_idx = 0; started = c; tick = st; achunk_ctr = states ? vb_per_chunk - 1 : 0; fill_needed = 0; g_done = 0;
+    g_irq_decode = states ? 1 : 0;
     decode_chunk(abuf[0]);
     IRQ_VECTOR = (u32)irq_handler;
     REG_DISPSTAT = 8;
