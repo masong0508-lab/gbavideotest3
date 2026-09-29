@@ -34,6 +34,16 @@ typedef unsigned int   u32;
 #define REG_VCOUNT     REG16(0x04000006)
 #define REG_BLDCNT     REG16(0x04000050)
 #define REG_BLDALPHA   REG16(0x04000052)
+#define REG_TM2CNT_L   REG16(0x04000108)
+#define REG_TM2CNT_H   REG16(0x0400010A)
+#define REG_TM3CNT_L   REG16(0x0400010C)
+#define REG_TM3CNT_H   REG16(0x0400010E)
+#define REG_BG2PA      REG16(0x04000020)
+#define REG_BG2PB      REG16(0x04000022)
+#define REG_BG2PC      REG16(0x04000024)
+#define REG_BG2PD      REG16(0x04000026)
+#define REG_BG2X       REG32(0x04000028)
+#define REG_BG2Y       REG32(0x0400002C)
 #define REG_KEYINPUT   REG16(0x04000130)
 #define OAM         ((volatile u16*)0x07000000)
 #define OBJ_PAL     ((volatile u16*)0x05000200)
@@ -120,6 +130,14 @@ __asm__(
     ".global egg_pal\negg_pal:\n"
     ".incbin \"egg_pal.bin\"\n"
     ".balign 4\n"
+    ".global fin_frames_start\nfin_frames_start:\n"      /* idle-menu finale clip (tools/make_finale.py) */
+    ".incbin \"fin_frames.bin\"\n"
+    ".global fin_frames_end\nfin_frames_end:\n"
+    ".balign 4\n"
+    ".global fin_audio_start\nfin_audio_start:\n"
+    ".incbin \"fin_audio.bin\"\n"
+    ".global fin_audio_end\nfin_audio_end:\n"
+    ".balign 4\n"
     ".text\n"
 );
 extern const u8  frames_start[], frames_end[];
@@ -147,6 +165,11 @@ extern const u32 vid2_frames_idx_start[], vid2_frames_idx_end[];
 extern const u16 vid2_palette_data[256];
 extern const u8  vid2_audio_start[], vid2_audio_end[];
 extern const u8  secret_audio_start[], secret_audio_end[];
+extern const u8  fin_frames_start[], fin_frames_end[];
+extern const u8  fin_audio_start[], fin_audio_end[];
+#include "finale.h"
+#define FIN_NFRAMES  ((u32)(fin_frames_end - fin_frames_start) / FIN_FRAME_BYTES)
+#define FIN_NCHUNKS  ((u32)(fin_audio_end - fin_audio_start) / (SAMPLES_PER_CHUNK / 2))
 #define SECRET_NCHUNKS ((u32)(secret_audio_end - secret_audio_start) / (SAMPLES_PER_CHUNK / 2))
 #define VID2_NCHUNKS ((u32)(vid2_audio_end - vid2_audio_start) / (SAMPLES_PER_CHUNK / 2))   /* derived from vid2_audio.bin */
 
@@ -615,6 +638,89 @@ static void place_hl(int sel) {
     OAM[2] = 512;
 }
 
+/* ================= idle-menu finale =================
+   After FIN_IDLE_SEC seconds with no button press on the MAIN menu, a short 30 fps clip plays
+   (Mode 5, 15-bit colour, no palette, scaled 1.5x by BG2), then the menu is rebuilt exactly as it
+   was (same highlighted item, same background frame) and play resumes as if nothing happened.
+   It plays once per power-up: g_fin_seen is plain RAM, so only a console reset re-arms it.
+   Set FIN_IDLE_RESETS_ON_INPUT to 0 to count total time in the menu instead of idle time. */
+#define FIN_IDLE_SEC 77u
+#define FIN_IDLE_TICKS (FIN_IDLE_SEC * 16384u)     /* TM2 runs at 16384 Hz (clk/1024), TM3 counts its overflows */
+#define FIN_IDLE_RESETS_ON_INPUT 1
+static u32 g_fin_seen = 0;
+
+static void idle_reset(void) {
+    REG_TM2CNT_H = 0; REG_TM3CNT_H = 0;
+    REG_TM2CNT_L = 0; REG_TM3CNT_L = 0;
+    REG_TM3CNT_H = 0x84;                           /* enable + cascade from TM2 */
+    REG_TM2CNT_H = 0x83;                           /* enable + prescaler 1024 */
+}
+static u32 idle_elapsed(void) {
+    u32 hi = REG_TM3CNT_L, lo = REG_TM2CNT_L;
+    if (REG_TM3CNT_L != hi) { hi = REG_TM3CNT_L; lo = REG_TM2CNT_L; }   /* overflow happened mid-read */
+    return (hi << 16) | lo;
+}
+
+static void fin_play(void) {
+    REG_IME = 0;
+    REG_DISPCNT = 0x80;                            /* forced blank while everything is swapped */
+    for (int i = 0; i < 256; i++) PALETTE[i] = 0;  /* backdrop (letterbox bars) black */
+    for (int i = 0; i < 128; i++) OAM[i * 4] = 0x200;
+    REG_BLDCNT = 0;
+    { volatile u32 *v = (volatile u32 *)0x06000000; for (int i = 0; i < 0x14000 / 4; i++) v[i] = 0; }
+    /* BG2 affine: 2/3 step = 1.5x zoom, 160x92 -> 240x138, centred vertically (11 px bars) */
+    REG_BG2PA = 171; REG_BG2PB = 0; REG_BG2PC = 0; REG_BG2PD = 171;
+    REG_BG2X = 0;    REG_BG2Y = (u32)(-11 * 171);
+    fin_decode_frame(fin_frames_start, (volatile u32 *)VRAM_PAGE0);
+
+    g_once = 1;
+    start_audio(0, fin_audio_start, FIN_NCHUNKS, 2, 0);   /* first chunk starts on tick 2 */
+    REG_DISPCNT = 5 | (1 << 10);                   /* Mode 5, BG2, page 0 */
+
+    u32 last = 0; int page = 0, pending = 0, drawn = 0;
+    for (;;) {
+        while (tick == last && !g_done) __asm__ volatile("swi 0x02" ::: "r0","r1","r2","r3","memory");
+        if (g_done) break;                         /* IRQ flags the vblank the audio (and clip) ends */
+        last = tick;
+        if (pending) { page ^= 1; REG_DISPCNT = 5 | (1 << 10) | (page << 4); pending = 0; }
+        if (fill_needed) { fill_needed = 0; decode_chunk(abuf[play_idx]); }
+        /* build the picture for NEXT tick on the hidden page; 1 frame = 2 vblanks, audio starts on tick 2 */
+        u32 nt = last + 1;
+        int f = nt >= 2 ? (int)((nt - 2) >> 1) : 0;
+        if (f >= (int)FIN_NFRAMES) f = (int)FIN_NFRAMES - 1;
+        if (f != drawn) {
+            fin_decode_frame(fin_frames_start + f * FIN_FRAME_BYTES,
+                             (volatile u32 *)(page ? VRAM_PAGE0 : VRAM_PAGE1));
+            drawn = f; pending = 1;
+        }
+    }
+    stop_audio();
+    REG_DISPCNT = 0x80;
+    REG_BG2PA = 0x100; REG_BG2PB = 0; REG_BG2PC = 0; REG_BG2PD = 0x100;   /* back to identity for Mode 4 */
+    REG_BG2X = 0; REG_BG2Y = 0;
+}
+
+/* rebuild the menu screen exactly as menu() left it (background frame k, highlight on `sel`) */
+static void fin_menu_restore(const char *const *items, int n, int k, int sel) {
+    for (int i = 0; i < 256; i++) PALETTE[i] = 0;            /* black until the picture is ready */
+    REG_DISPCNT = 4 | (1 << 10) | 0x80;
+    REG_BLDCNT = 0;
+    for (int i = 0; i < 128; i++) OAM[i * 4] = 0x200;
+    unpack_menu(VRAM_PAGE0, menu_bg[k], 19200);
+    unpack_menu(VRAM_PAGE1, menu_bg[k], 19200);
+    for (int j = 0; j < n; j++) {
+        g_page = VRAM_PAGE0; text(COL_CX - text_w(items[j]) / 2, ROW_Y(j) - 3, items[j]);
+        g_page = VRAM_PAGE1; text(COL_CX - text_w(items[j]) / 2, ROW_Y(j) - 3, items[j]);
+    }
+    g_page = VRAM_PAGE0;
+    make_highlight();
+    place_hl(sel);
+    REG_BLDCNT = 0x0450; REG_BLDALPHA = 5 | (11 << 8);
+    wait_vb();
+    set_menu_pal(k);
+    REG_DISPCNT = 4 | (1 << 10) | (1 << 6) | (1 << 12);      /* page 0, sprites on */
+}
+
 /* returns chosen index, or -1 for B (only when allow_back) */
 static int menu(const char *const *items, int n, int allow_back) {
     menu_setup();
@@ -626,6 +732,8 @@ static int menu(const char *const *items, int n, int allow_back) {
     /* Altered code: D D U U L R L R B A, triggers the easter-egg clip */
     static const u16 konami2[10] = { 0x80, 0x80, 0x40, 0x40, 0x20, 0x10, 0x20, 0x10, 0x02, 0x01 };
     int ki = 0, ki2 = 0;
+    int idle_on = (!allow_back && !g_fin_seen);
+    if (idle_on) idle_reset();
     /* Background animation: frames 0,1,2,1 repeat, 30 vblanks (0.5 s) each. The next frame is
        built on the hidden page a slice per vblank, then palette + page are swapped at the
        start of a vblank, so the change is instant and never flickers or stalls input. */
@@ -659,6 +767,20 @@ static int menu(const char *const *items, int n, int allow_back) {
         u16 k = (u16)(~REG_KEYINPUT & 0x3FF);
         u16 hit = k & ~prev;
         prev = k;
+        if (idle_on) {
+#if FIN_IDLE_RESETS_ON_INPUT
+            if (hit) idle_reset();
+#endif
+            if (idle_elapsed() >= FIN_IDLE_TICKS) {
+                idle_on = 0; g_fin_seen = 1;
+                REG_TM2CNT_H = 0; REG_TM3CNT_H = 0;
+                fin_play();
+                fin_menu_restore(items, n, anim_seq[si], sel);
+                mp = 0; ac = 0; prep = 0; ki = ki2 = 0;
+                prev = (u16)(~REG_KEYINPUT & 0x3FF);
+                continue;
+            }
+        }
         if (!allow_back && hit) {                            /* Konami: U U D D L R L R B A */
             if (hit == konami[ki]) ki++;
             else ki = (hit == konami[0]) ? 1 : 0;
