@@ -257,8 +257,8 @@ static void draw_frame(const u8 *src, volatile u16 *dst) {
 }
 
 /* ================= menu ================= */
-static const char font_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123";
-static const u8 font5x7[29][5] = {
+static const char font_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123 0456789.,!?'-";
+static const u8 font5x7[29+15][5] = {
 {0x7E,0x11,0x11,0x11,0x7E},{0x7F,0x49,0x49,0x49,0x36},{0x3E,0x41,0x41,0x41,0x22},
 {0x7F,0x41,0x41,0x41,0x3E},{0x7F,0x49,0x49,0x49,0x41},{0x7F,0x09,0x09,0x09,0x01},
 {0x3E,0x41,0x49,0x49,0x7A},{0x7F,0x08,0x08,0x08,0x7F},{0x00,0x41,0x7F,0x41,0x00},
@@ -268,7 +268,13 @@ static const u8 font5x7[29][5] = {
 {0x46,0x49,0x49,0x49,0x31},{0x01,0x01,0x7F,0x01,0x01},{0x3F,0x40,0x40,0x40,0x3F},
 {0x1F,0x20,0x40,0x20,0x1F},{0x3F,0x40,0x38,0x40,0x3F},{0x63,0x14,0x08,0x14,0x63},
 {0x07,0x08,0x70,0x08,0x07},{0x61,0x51,0x49,0x45,0x43},
-{0x00,0x42,0x7F,0x40,0x00},{0x42,0x61,0x51,0x49,0x46},{0x21,0x41,0x45,0x4B,0x31}
+{0x00,0x42,0x7F,0x40,0x00},{0x42,0x61,0x51,0x49,0x46},{0x21,0x41,0x45,0x4B,0x31},
+/* added: space 0 4 5 6 7 8 9 . , ! ? ' - */
+{0x00,0x00,0x00,0x00,0x00},{0x3E,0x51,0x49,0x45,0x3E},{0x18,0x14,0x12,0x7F,0x10},
+{0x27,0x45,0x45,0x45,0x39},{0x3C,0x4A,0x49,0x49,0x30},{0x01,0x71,0x09,0x05,0x03},
+{0x36,0x49,0x49,0x49,0x36},{0x06,0x49,0x49,0x29,0x1E},{0x00,0x60,0x60,0x00,0x00},
+{0x00,0x50,0x30,0x00,0x00},{0x00,0x00,0x5F,0x00,0x00},{0x02,0x01,0x51,0x09,0x06},
+{0x00,0x05,0x03,0x00,0x00},{0x08,0x08,0x08,0x08,0x08}
 };
 
 static void wait_vb(void) { while (REG_VCOUNT >= 160) {} while (REG_VCOUNT < 160) {} }
@@ -306,6 +312,340 @@ static void text(int x, int y, const char *s) {
     }
 }
 
+#define SUB_N 103
+static const u16 sub_start[SUB_N] = {
+  258,
+  3341,
+  3493,
+  3659,
+  5058,
+  5300,
+  5512,
+  5862,
+  5963,
+  6079,
+  6248,
+  6426,
+  6551,
+  6936,
+  7008,
+  7253,
+  7590,
+  7825,
+  8039,
+  8282,
+  8561,
+  8713,
+  8999,
+  9156,
+  9310,
+  9352,
+  9433,
+  9654,
+  10112,
+  10256,
+  10873,
+  10978,
+  11230,
+  11315,
+  11508,
+  11800,
+  12145,
+  12652,
+  12743,
+  12998,
+  13019,
+  13088,
+  13159,
+  13542,
+  14773,
+  15516,
+  15640,
+  15884,
+  16218,
+  16565,
+  16885,
+  17087,
+  17344,
+  17534,
+  17791,
+  17981,
+  18322,
+  18403,
+  18552,
+  18774,
+  19475,
+  20044,
+  20130,
+  20351,
+  20730,
+  21534,
+  22385,
+  22655,
+  22786,
+  23507,
+  28229,
+  28612,
+  28780,
+  29052,
+  29446,
+  29716,
+  30128,
+  30425,
+  30675,
+  30915,
+  31625,
+  31749,
+  32134,
+  32554,
+  32919,
+  33345,
+  33606,
+  33868,
+  34167,
+  34631,
+  35030,
+  35246,
+  36095,
+  36095,
+  36318,
+  39632,
+  39892,
+  40096,
+  41127,
+  41271,
+  44488,
+  44601,
+  44746,
+};
+static const u16 sub_end[SUB_N] = {
+  330,
+  3444,
+  3632,
+  5057,
+  5274,
+  5482,
+  5614,
+  5957,
+  6076,
+  6163,
+  6397,
+  6505,
+  6656,
+  6984,
+  7250,
+  7554,
+  7823,
+  7991,
+  8279,
+  8558,
+  8678,
+  8892,
+  9144,
+  9307,
+  9352,
+  9409,
+  9437,
+  9881,
+  10208,
+  10266,
+  10884,
+  11028,
+  11266,
+  11479,
+  11602,
+  12090,
+  12619,
+  12718,
+  12775,
+  13000,
+  13067,
+  13141,
+  13267,
+  13729,
+  14945,
+  15528,
+  15775,
+  16037,
+  16387,
+  16720,
+  17023,
+  17341,
+  17531,
+  17788,
+  17977,
+  18280,
+  18355,
+  18550,
+  18745,
+  19432,
+  19586,
+  20072,
+  20152,
+  20603,
+  20856,
+  22192,
+  22413,
+  22726,
+  22850,
+  23618,
+  28517,
+  28745,
+  28985,
+  29396,
+  29706,
+  30072,
+  30332,
+  30669,
+  30845,
+  31248,
+  31744,
+  32054,
+  32447,
+  32885,
+  33276,
+  33572,
+  33796,
+  34074,
+  34562,
+  34958,
+  35246,
+  36096,
+  36096,
+  36138,
+  36492,
+  39687,
+  40050,
+  40241,
+  41194,
+  44464,
+  44524,
+  44698,
+  44907,
+};
+static const char *const sub_text[SUB_N] = {
+  "NUMBER 10.",
+  "THE BUGS ARE BITING MY PUSSY AGAIN",
+  "LADIES, WHEN THE BUGS START BITING",
+  "AND STUFF- NUMBER 10.",
+  "THE WOMAN WITH THE SHOULDER BAG, P",
+  "I REPEAT, THE WOMAN WITH THE SHOUL",
+  "HEY, YOU, STOP WHERE YOU ARE.",
+  "MIND TELLING US WHY YOU'RE RUNNING",
+  "BECAUSE I'M LATE. I HAVE CLASS IN",
+  "BUT YOU CAN'T RUN LIKE THAT, MISS.",
+  "WHEN YOU RUN YOUR, UH, YOUR REAR E",
+  "IT'S, WHAT YOU CALL, IMMODEST.",
+  "WELL THEN, STOP STARING AT MY BUTT",
+  "HI, FANS.",
+  "THERE WAS A TIME WHEN I WAS 14 YEA",
+  "THE MALL AND A CAR PULLED OVER AND",
+  "WELL, I GOT INTO THE CAR, WE DROVE",
+  "AT ME AND HE ASKED IF HE COULD HAV",
+  "WELL, I SAID, A LITTLE FEEL COULD",
+  "OH, GOD, THAT'S NO WHAT YOU- ANYWA",
+  "OFF AT THE NEXT STOP 'CAUSE I DIDN",
+  "HE WAS, HE WAS STARTING TO SCARE M",
+  "SO I GOT OFF AT THE NEXT STOP AND",
+  "I TOLD MY MOMMY WHAT HAPPENED, AND",
+  "SHOULDN'T LET STRANGERS FEEL YOUR",
+  "YOU SHOULDN'T LET STRANGERS FEEL Y",
+  "OH.",
+  "SHE SAYS, BUT IF YOUR, IF DADDY WA",
+  "THEY'RE ALL FREAKS OUT THERE.",
+  "AH.",
+  "HMM.",
+  "THAT TURNS ME ON.",
+  "NUMBER 10.",
+  "THE HIDEOUS CREATURE BEFORE YOU IS",
+  "ONLY HE REMAINS.",
+  "AND BEING A TV DINNER, HIS DESTINY",
+  "THAT'S IT.",
+  "IT WON'T BE LONG NOW.",
+  "SAM'S GAY.",
+  "OOH.",
+  "HELLO THERE.",
+  "DON'T BE AFRAID.",
+  "I'LL BE YOUR EATER FOR THIS EVENIN",
+  "THANK YOU. NO, THANK YOU.",
+  "UH. ARE YOU READY FOR TELETOON'S N",
+  "YEP.",
+  "COMING THIS FALL TO TELETOON.",
+  "I WANNA WALK YOU HOME.",
+  "PLEASE LET ME WALK YOU HOME.",
+  "I WANT TO WALK YOU HOME.",
+  "PLEASE LET ME WALK YOU HOME.",
+  "BOYS WHO LIKE GIRLS WHO LIKE BOYS",
+  "LIKE GAY GIRLS WHO DO- ALEXA, REWI",
+  "GIRLS WHO LIKE BOYS WHO LIKE BOYS",
+  "LIKE GAY GIRLS WHO DO GIRLS- ALEXA",
+  "GIRLS WHO... OOH, WEE, I SAW YOU W",
+  "THAT'S WHY I...",
+  "BOYS WHO LIKE BOYS WHO LIKE GIRLS",
+  "LIKE GAY GIRLS WHO DO GIRLS LIKE G",
+  "DO- IT'S OVER.",
+  "HE'S GONE ON TO A BETTER PLACE.",
+  "NUMBER 10.",
+  "CAROL.",
+  "ME AND MY- HAVE YOU EVER HAD A DRE",
+  "TO ANYTHING? NUMBER 10.",
+  "NUMBER 10 ALL RIGHT, DOGGY, BARK F",
+  "LOUDER.",
+  "NOW CLUCK LIKE A CHICKEN.",
+  "WHAT? A CHICKEN, NOW!",
+  "NOW, LOWER LANE, A HUMONGOUS SNAKE",
+  "SHE WANTED TO TEST HER HUSBAND. SH",
+  "A PSEUDONYM TO FOOL HIM.",
+  "SHE COULDN'T HAVE MADE A WORSE CHO",
+  "SHE SENT HIM SCENTED LETTERS, AND",
+  "JUST LIKE HIS WIFE, BUT HOW SHE WA",
+  "TEARS, AND HOW SHE WAS BEFORE THE",
+  "AND HOW SHE WAS WHEN SHE WAS BEAUT",
+  "SHE SIGNED THE LETTER, OI, BABOOSH",
+  "BABOOSHKA, BABOOSHKA YA YA.",
+  "OI, BABOOSHKA, BABOOSHKA, BABOOSHK",
+  "BABOOSHKA.",
+  "SHE WANTED TO TAKE IT FURTHER, SO",
+  "TO SEE IF HE WOULD FALL FOR HER IN",
+  "AND WHEN HE LAID EYES ON HER, HE G",
+  "UNCANNY HOW SHE REMINDS HIM OF HIS",
+  "CAPACITY TO GIVE HIM ALL HE NEEDS.",
+  "JUST LIKE HIS WIFE BEFORE SHE FREE",
+  "JUST LIKE HIS WIFE WHEN SHE WAS BE",
+  "SHOUTED OUT, OI, BABOOSHKA, BABOOS",
+  "OI, BABOOSHKA, BABOOSHKA, BABOOSHK",
+  "OI, BABOOSHKA, BABOOSHKA, BABOOSHK",
+  "BABOOSHKA, BABOOSHKA, BABOOSHKA YA",
+  "BABOOSHKA, BABOOSHKA, BABOOSHKA YA",
+  "BABOOSHKA, BABOOSHKA, BABOOSHKA YA",
+  "BABOOSHKA. BABOOSHKA. BABOOSHKA.",
+  "WHERE'S MY SON?",
+  "LOOK, KIDDO, DON'T GET YOUR BALLS",
+  "I'M JUST THE CARRIER OF THE MESSAG",
+  "WHAT THE...",
+  "OOH, YEAH. DAMN.",
+  "AT NUMBER ONE.",
+  "WELCOME, LITTLE WHITE BOY.",
+  "WELCOME TO WAKANDA. SURPRISINGLY T",
+};
+
+static int g_sub_lang = 0;   /* 0 off, 1 english, 2 spanish (falls back to english: no Spanish track was supplied) */
+
+/* linear scan is fine: called a few times a second, table is tiny */
+static const char *sub_lookup(u32 t) {
+    if (!g_sub_lang) return 0;
+    for (int i = 0; i < SUB_N; i++)
+        if (t >= sub_start[i] && t < sub_end[i]) return sub_text[i];
+    return 0;
+}
+
+static char sub_label[24];
+static void update_sub_label(void) {
+    static const char *const names[3] = { "SUBTITLES OFF", "SUBTITLES EN", "SUBTITLES ES" };
+    int i = 0; for (const char *p = names[g_sub_lang]; *p; p++) sub_label[i++] = *p;
+    sub_label[i] = 0;
+}
+
 static void menu_setup(void) {
     REG_IME = 0;
     set_menu_pal(0);
@@ -316,8 +656,8 @@ static void menu_setup(void) {
 
 /* 64x32 rounded highlight sprite (4bpp), alpha-blended over the background */
 static void make_highlight(void) {
-    OBJ_PAL[1] = 8 | (31 << 5) | (4 << 10);     /* bright lime core */
-    OBJ_PAL[2] = 4 | (24 << 5) | (2 << 10);     /* darker rim */
+    OBJ_PAL[1] = 31 | (6 << 5) | (16 << 10);    /* bright pinkish-red core */
+    OBJ_PAL[2] = 22 | (2 << 5) | (10 << 10);    /* darker rim */
     for (int ty = 0; ty < 4; ty++)
         for (int tx = 0; tx < 8; tx++)
             for (int r = 0; r < 8; r++) {
@@ -599,9 +939,9 @@ static void place_hl(int sel) {
 }
 
 /* returns chosen index, or -1 for B (only when allow_back) */
-static int menu(const char *const *items, int allow_back) {
+static int menu(const char *const *items, int n, int allow_back) {
     menu_setup();
-    for (int i = 0; i < 3; i++) text(COL_CX - text_w(items[i]) / 2, ROW_Y(i) - 3, items[i]);
+    for (int i = 0; i < n; i++) text(COL_CX - text_w(items[i]) / 2, ROW_Y(i) - 3, items[i]);
     make_highlight();
     REG_DISPCNT = 4 | (1 << 10) | (1 << 6) | (1 << 12);
     int sel = 0;
@@ -634,7 +974,7 @@ static int menu(const char *const *items, int allow_back) {
                 prep++;
             } else if (prep == 4) {
                 g_page = back;
-                for (int i = 0; i < 3; i++) text(COL_CX - text_w(items[i]) / 2, ROW_Y(i) - 3, items[i]);
+                for (int i = 0; i < n; i++) text(COL_CX - text_w(items[i]) / 2, ROW_Y(i) - 3, items[i]);
                 g_page = VRAM_PAGE0;
                 prep = 5;
             }
@@ -652,7 +992,7 @@ static int menu(const char *const *items, int allow_back) {
                 volatile u16 *back = shown ? VRAM_PAGE0 : VRAM_PAGE1;
                 unpack_menu(back, menu_bg[0], 19200);
                 g_page = back;
-                for (int i = 0; i < 3; i++) text(COL_CX - text_w(items[i]) / 2, ROW_Y(i) - 3, items[i]);
+                for (int i = 0; i < n; i++) text(COL_CX - text_w(items[i]) / 2, ROW_Y(i) - 3, items[i]);
                 g_page = VRAM_PAGE0;
                 make_highlight();
                 REG_BLDCNT = 0;                               /* the face is still on screen: keep it opaque */
@@ -676,11 +1016,108 @@ static int menu(const char *const *items, int allow_back) {
             else ki2 = (hit == konami2[0]) ? 1 : 0;
             if (ki2 == 10) { ki2 = 0; return -3; }
         }
-        if (hit & 0x40) sel = (sel + 2) % 3;                 /* up */
-        if (hit & 0x80) sel = (sel + 1) % 3;                 /* down */
+        if (hit & 0x40) sel = (sel + n - 1) % n;              /* up */
+        if (hit & 0x80) sel = (sel + 1) % n;                  /* down */
+        if ((hit & 0x09) && n == 4 && sel == 3) {             /* A/START on SUBTITLES: cycle, don't leave menu */
+            g_sub_lang = (g_sub_lang + 1) % 3;
+            update_sub_label();
+            unpack_menu(VRAM_PAGE0, menu_bg[anim_seq[si]], 19200);
+            unpack_menu(VRAM_PAGE1, menu_bg[anim_seq[si]], 19200);
+            for (int j = 0; j < n; j++) {
+                g_page = VRAM_PAGE0; text(COL_CX - text_w(items[j]) / 2, ROW_Y(j) - 3, items[j]);
+                g_page = VRAM_PAGE1; text(COL_CX - text_w(items[j]) / 2, ROW_Y(j) - 3, items[j]);
+            }
+            g_page = VRAM_PAGE0;
+            prep = 5; ac = 0;
+            continue;
+        }
         if (hit & 0x09) return sel;                          /* A / START */
         if ((hit & 0x02) && allow_back) return -1;           /* B */
     }
+}
+
+/* ================= title intro =================
+   Runs once at boot, before the menu ever appears: 19 letter-sprites (spaces are just gaps)
+   scatter in from random points, dart through a random mid-screen clump, then land on the
+   exact centred layout that spells "TOP 10 ANIMOMENTS !!!!" - 240 vblanks = 4.0s @ 60Hz.
+   Pure integer/fixed math (no sin/cos, no float) so the landing position is always exact,
+   never approximated. Uses OBJ tiles 512..530 (local 0..18) and OBJ_PAL bank 0 colours 5-7;
+   both ranges are free at boot and get overwritten harmlessly once make_highlight() runs. */
+#define INTRO_N     19
+#define INTRO_P1    150          /* ticks: scatter point -> mid clump */
+#define INTRO_P2    210          /* ticks: mid clump -> exact word (then hold) */
+#define INTRO_TOTAL 240          /* 4.0 s at 60 Hz */
+
+static void build_letter_tile(int idx, char c, int pal) {
+    const u8 *g = glyph(c);
+    for (int r = 0; r < 8; r++) {
+        u32 w = 0;
+        if (g) for (int col = 0; col < 5; col++)
+            if (r < 7 && ((g[col] >> r) & 1)) w |= (u32)pal << (4 * col);
+        OBJ_TILES[idx * 8 + r] = w;
+    }
+}
+
+static void title_intro(void) {
+    static const char title[] = "TOP 10 ANIMOMENTS !!!!";
+    int fx[INTRO_N], fy[INTRO_N];    /* final, exact positions */
+    int sx[INTRO_N], sy[INTRO_N];    /* scatter start */
+    int mx[INTRO_N], my[INTRO_N];    /* mid clump waypoint */
+    u8  lpal[INTRO_N];
+
+    REG_IME = 0;
+    for (int i = 0; i < 128; i++) OAM[i * 4] = 0x200;       /* hide everything */
+    PALETTE[0] = 0;                                          /* black backdrop; no BG2 needed */
+    OBJ_PAL[5] = 0x7FFF;                                     /* white */
+    OBJ_PAL[6] = 16 | (6 << 5) | (26 << 10);                 /* bright pinkish red */
+    OBJ_PAL[7] = 10 | (3 << 5) | (17 << 10);                 /* darker pinkish red */
+
+    rng_state = 0x9E3779B9u ^ ((u32)REG_VCOUNT << 8) ^ ((u32)REG_TM0CNT_L << 16);
+
+    int n = 0, cx = 120 - text_w(title) / 2;
+    for (const char *p = title; *p; p++, cx += 7) {
+        if (*p == ' ') continue;                             /* space: advance only, no sprite */
+        fx[n] = cx; fy[n] = 76;
+        lpal[n] = (u8)(5 + (n % 3));
+        build_letter_tile(n, *p, lpal[n]);
+        sx[n] = (int)(rnd() % 288) - 24;               /* scattered off/around the screen */
+        sy[n] = (int)(rnd() % 192) - 16;
+        mx[n] = 96 + (int)(rnd() % 48);                /* random mid-screen clump */
+        my[n] = 52 + (int)(rnd() % 56);
+        n++;
+    }
+
+    REG_DISPCNT = 4 | (1 << 6) | (1 << 12);                  /* mode 4, 1D obj mapping, OBJ layer only */
+
+    u16 prev = (u16)(~REG_KEYINPUT & 0x3FF);
+    for (int t = 0; t < INTRO_TOTAL; t++) {
+        wait_vb();
+        u16 k = (u16)(~REG_KEYINPUT & 0x3FF);
+        u16 hit = k & ~prev; prev = k;
+        if (hit) break;                                      /* any button: skip straight to the menu */
+
+        for (int i = 0; i < n; i++) {
+            int x, y;
+            if (t < INTRO_P1) {
+                x = sx[i] + (int)(mx[i] - sx[i]) * t / INTRO_P1;
+                y = sy[i] + (int)(my[i] - sy[i]) * t / INTRO_P1;
+            } else if (t < INTRO_P2) {
+                int u = t - INTRO_P1, d = INTRO_P2 - INTRO_P1;
+                x = mx[i] + (int)(fx[i] - mx[i]) * u / d;
+                y = my[i] + (int)(fy[i] - my[i]) * u / d;
+            } else {
+                x = fx[i]; y = fy[i];                          /* held exactly, no drift */
+            }
+            OAM[i * 4]     = (u16)(y & 0xFF);
+            OAM[i * 4 + 1] = (u16)(x & 0x1FF);
+            OAM[i * 4 + 2] = (u16)(512 + i);                   /* bank 0: nibble value picks the colour */
+        }
+    }
+    for (int i = 0; i < n; i++) {                              /* final frame: pin exact coords */
+        OAM[i * 4]     = (u16)(fy[i] & 0xFF);
+        OAM[i * 4 + 1] = (u16)(fx[i] & 0x1FF);
+    }
+    wait_vb(); wait_vb(); wait_vb(); wait_vb(); wait_vb(); wait_vb();  /* hold ~0.1s so it reads before the menu cuts in */
 }
 
 static void controls(void) {
@@ -760,9 +1197,11 @@ static void stop_audio(void) {
 #define SEEK_STEP 4                         /* ticks (vblanks) per frame while seeking = 4x speed */
 
 static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned count,
-                          const u16 *pal, const u8 *audio_base, u32 nchunks, u32 rate, const u32 *states) {
+                          const u16 *pal, const u8 *audio_base, u32 nchunks, u32 rate, const u32 *states,
+                          int use_subs) {
     REG_IME = 0;
     for (int i = 0; i < 256; i++) PALETTE[i] = pal[i];
+    if (use_subs) { PALETTE[254] = 0; PALETTE[255] = 0x7FFF; }  /* sacrifice 2 of 256 video colours for sub text */
     for (int i = 0; i < 19200; i++) VRAM_PAGE0[i] = 0;
     for (int i = 0; i < 128; i++) OAM[i * 4] = 0x200;
     REG_DISPCNT = 4 | (1 << 10);
@@ -833,6 +1272,14 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
         if ((int)f != drawn) {
             decode_frame(fr_start, idx[f], idx[f + 1]);
             draw_frame(frame_buf, page ? VRAM_PAGE0 : VRAM_PAGE1);
+            if (use_subs) {
+                const char *s = sub_lookup(t);
+                if (s) {
+                    g_page = page ? VRAM_PAGE0 : VRAM_PAGE1;
+                    text(120 - text_w(s) / 2, 148, s);
+                    g_page = VRAM_PAGE0;
+                }
+            }
             drawn = (int)f;
             pending = 1;
         }
@@ -844,7 +1291,7 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
 
 static void play(u32 st) {
     unsigned count = (unsigned)(frames_idx_end - frames_idx_start) - 1;
-    play_generic(st, frames_start, frames_idx_start, count, palette_data, audio_start, NCHUNKS, 1, audio_state);
+    play_generic(st, frames_start, frames_idx_start, count, palette_data, audio_start, NCHUNKS, 1, audio_state, 1);
 }
 
 /* Second (hidden) video, triggered by the alternate Konami code (D D U U L R L R B A).
@@ -857,18 +1304,21 @@ static void play(u32 st) {
 static void play_vid2(void) {
     unsigned count = (unsigned)(vid2_frames_idx_end - vid2_frames_idx_start) - 1;
     play_generic(0, vid2_frames_start, vid2_frames_idx_start, count, vid2_palette_data,
-                 vid2_audio_start, VID2_NCHUNKS, 2, vid2_audio_state);
+                 vid2_audio_start, VID2_NCHUNKS, 2, vid2_audio_state, 0);
 }
 
 int main(void) {
-    static const char *const main_items[3] = { "PLAY", "CHAPTERS", "CONTROLS" };
+    title_intro();
+    update_sub_label();
     static const char *const chap_items[3] = { "PART 1", "PART 2", "PART 3" };
+    const char *main_items[4] = { "PLAY", "CHAPTERS", "CONTROLS", sub_label };
     for (;;) {
-        int a = menu(main_items, 0);
+        main_items[3] = sub_label;
+        int a = menu(main_items, 4, 0);
         if (a == -2) continue;
         if (a == -3) { play_vid2(); continue; }
         if (a == 0) play(0);
-        else if (a == 1) { int c = menu(chap_items, 1); if (c >= 0) play(chapter_tick(c)); }
-        else controls();
+        else if (a == 1) { int c = menu(chap_items, 3, 1); if (c >= 0) play(chapter_tick(c)); }
+        else if (a == 2) controls();
     }
 }
