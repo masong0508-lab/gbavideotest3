@@ -312,329 +312,14 @@ static void text(int x, int y, const char *s) {
     }
 }
 
-#define SUB_N 103
-static const u16 sub_start[SUB_N] = {
-  258,
-  3341,
-  3493,
-  3659,
-  5058,
-  5300,
-  5512,
-  5862,
-  5963,
-  6079,
-  6248,
-  6426,
-  6551,
-  6936,
-  7008,
-  7253,
-  7590,
-  7825,
-  8039,
-  8282,
-  8561,
-  8713,
-  8999,
-  9156,
-  9310,
-  9352,
-  9433,
-  9654,
-  10112,
-  10256,
-  10873,
-  10978,
-  11230,
-  11315,
-  11508,
-  11800,
-  12145,
-  12652,
-  12743,
-  12998,
-  13019,
-  13088,
-  13159,
-  13542,
-  14773,
-  15516,
-  15640,
-  15884,
-  16218,
-  16565,
-  16885,
-  17087,
-  17344,
-  17534,
-  17791,
-  17981,
-  18322,
-  18403,
-  18552,
-  18774,
-  19475,
-  20044,
-  20130,
-  20351,
-  20730,
-  21534,
-  22385,
-  22655,
-  22786,
-  23507,
-  28229,
-  28612,
-  28780,
-  29052,
-  29446,
-  29716,
-  30128,
-  30425,
-  30675,
-  30915,
-  31625,
-  31749,
-  32134,
-  32554,
-  32919,
-  33345,
-  33606,
-  33868,
-  34167,
-  34631,
-  35030,
-  35246,
-  36095,
-  36095,
-  36318,
-  39632,
-  39892,
-  40096,
-  41127,
-  41271,
-  44488,
-  44601,
-  44746,
-};
-static const u16 sub_end[SUB_N] = {
-  330,
-  3444,
-  3632,
-  5057,
-  5274,
-  5482,
-  5614,
-  5957,
-  6076,
-  6163,
-  6397,
-  6505,
-  6656,
-  6984,
-  7250,
-  7554,
-  7823,
-  7991,
-  8279,
-  8558,
-  8678,
-  8892,
-  9144,
-  9307,
-  9352,
-  9409,
-  9437,
-  9881,
-  10208,
-  10266,
-  10884,
-  11028,
-  11266,
-  11479,
-  11602,
-  12090,
-  12619,
-  12718,
-  12775,
-  13000,
-  13067,
-  13141,
-  13267,
-  13729,
-  14945,
-  15528,
-  15775,
-  16037,
-  16387,
-  16720,
-  17023,
-  17341,
-  17531,
-  17788,
-  17977,
-  18280,
-  18355,
-  18550,
-  18745,
-  19432,
-  19586,
-  20072,
-  20152,
-  20603,
-  20856,
-  22192,
-  22413,
-  22726,
-  22850,
-  23618,
-  28517,
-  28745,
-  28985,
-  29396,
-  29706,
-  30072,
-  30332,
-  30669,
-  30845,
-  31248,
-  31744,
-  32054,
-  32447,
-  32885,
-  33276,
-  33572,
-  33796,
-  34074,
-  34562,
-  34958,
-  35246,
-  36096,
-  36096,
-  36138,
-  36492,
-  39687,
-  40050,
-  40241,
-  41194,
-  44464,
-  44524,
-  44698,
-  44907,
-};
-static const char *const sub_text[SUB_N] = {
-  "NUMBER 10.",
-  "THE BUGS ARE BITING MY PUSSY AGAIN",
-  "LADIES, WHEN THE BUGS START BITING",
-  "AND STUFF- NUMBER 10.",
-  "THE WOMAN WITH THE SHOULDER BAG, P",
-  "I REPEAT, THE WOMAN WITH THE SHOUL",
-  "HEY, YOU, STOP WHERE YOU ARE.",
-  "MIND TELLING US WHY YOU'RE RUNNING",
-  "BECAUSE I'M LATE. I HAVE CLASS IN",
-  "BUT YOU CAN'T RUN LIKE THAT, MISS.",
-  "WHEN YOU RUN YOUR, UH, YOUR REAR E",
-  "IT'S, WHAT YOU CALL, IMMODEST.",
-  "WELL THEN, STOP STARING AT MY BUTT",
-  "HI, FANS.",
-  "THERE WAS A TIME WHEN I WAS 14 YEA",
-  "THE MALL AND A CAR PULLED OVER AND",
-  "WELL, I GOT INTO THE CAR, WE DROVE",
-  "AT ME AND HE ASKED IF HE COULD HAV",
-  "WELL, I SAID, A LITTLE FEEL COULD",
-  "OH, GOD, THAT'S NO WHAT YOU- ANYWA",
-  "OFF AT THE NEXT STOP 'CAUSE I DIDN",
-  "HE WAS, HE WAS STARTING TO SCARE M",
-  "SO I GOT OFF AT THE NEXT STOP AND",
-  "I TOLD MY MOMMY WHAT HAPPENED, AND",
-  "SHOULDN'T LET STRANGERS FEEL YOUR",
-  "YOU SHOULDN'T LET STRANGERS FEEL Y",
-  "OH.",
-  "SHE SAYS, BUT IF YOUR, IF DADDY WA",
-  "THEY'RE ALL FREAKS OUT THERE.",
-  "AH.",
-  "HMM.",
-  "THAT TURNS ME ON.",
-  "NUMBER 10.",
-  "THE HIDEOUS CREATURE BEFORE YOU IS",
-  "ONLY HE REMAINS.",
-  "AND BEING A TV DINNER, HIS DESTINY",
-  "THAT'S IT.",
-  "IT WON'T BE LONG NOW.",
-  "SAM'S GAY.",
-  "OOH.",
-  "HELLO THERE.",
-  "DON'T BE AFRAID.",
-  "I'LL BE YOUR EATER FOR THIS EVENIN",
-  "THANK YOU. NO, THANK YOU.",
-  "UH. ARE YOU READY FOR TELETOON'S N",
-  "YEP.",
-  "COMING THIS FALL TO TELETOON.",
-  "I WANNA WALK YOU HOME.",
-  "PLEASE LET ME WALK YOU HOME.",
-  "I WANT TO WALK YOU HOME.",
-  "PLEASE LET ME WALK YOU HOME.",
-  "BOYS WHO LIKE GIRLS WHO LIKE BOYS",
-  "LIKE GAY GIRLS WHO DO- ALEXA, REWI",
-  "GIRLS WHO LIKE BOYS WHO LIKE BOYS",
-  "LIKE GAY GIRLS WHO DO GIRLS- ALEXA",
-  "GIRLS WHO... OOH, WEE, I SAW YOU W",
-  "THAT'S WHY I...",
-  "BOYS WHO LIKE BOYS WHO LIKE GIRLS",
-  "LIKE GAY GIRLS WHO DO GIRLS LIKE G",
-  "DO- IT'S OVER.",
-  "HE'S GONE ON TO A BETTER PLACE.",
-  "NUMBER 10.",
-  "CAROL.",
-  "ME AND MY- HAVE YOU EVER HAD A DRE",
-  "TO ANYTHING? NUMBER 10.",
-  "NUMBER 10 ALL RIGHT, DOGGY, BARK F",
-  "LOUDER.",
-  "NOW CLUCK LIKE A CHICKEN.",
-  "WHAT? A CHICKEN, NOW!",
-  "NOW, LOWER LANE, A HUMONGOUS SNAKE",
-  "SHE WANTED TO TEST HER HUSBAND. SH",
-  "A PSEUDONYM TO FOOL HIM.",
-  "SHE COULDN'T HAVE MADE A WORSE CHO",
-  "SHE SENT HIM SCENTED LETTERS, AND",
-  "JUST LIKE HIS WIFE, BUT HOW SHE WA",
-  "TEARS, AND HOW SHE WAS BEFORE THE",
-  "AND HOW SHE WAS WHEN SHE WAS BEAUT",
-  "SHE SIGNED THE LETTER, OI, BABOOSH",
-  "BABOOSHKA, BABOOSHKA YA YA.",
-  "OI, BABOOSHKA, BABOOSHKA, BABOOSHK",
-  "BABOOSHKA.",
-  "SHE WANTED TO TAKE IT FURTHER, SO",
-  "TO SEE IF HE WOULD FALL FOR HER IN",
-  "AND WHEN HE LAID EYES ON HER, HE G",
-  "UNCANNY HOW SHE REMINDS HIM OF HIS",
-  "CAPACITY TO GIVE HIM ALL HE NEEDS.",
-  "JUST LIKE HIS WIFE BEFORE SHE FREE",
-  "JUST LIKE HIS WIFE WHEN SHE WAS BE",
-  "SHOUTED OUT, OI, BABOOSHKA, BABOOS",
-  "OI, BABOOSHKA, BABOOSHKA, BABOOSHK",
-  "OI, BABOOSHKA, BABOOSHKA, BABOOSHK",
-  "BABOOSHKA, BABOOSHKA, BABOOSHKA YA",
-  "BABOOSHKA, BABOOSHKA, BABOOSHKA YA",
-  "BABOOSHKA, BABOOSHKA, BABOOSHKA YA",
-  "BABOOSHKA. BABOOSHKA. BABOOSHKA.",
-  "WHERE'S MY SON?",
-  "LOOK, KIDDO, DON'T GET YOUR BALLS",
-  "I'M JUST THE CARRIER OF THE MESSAG",
-  "WHAT THE...",
-  "OOH, YEAH. DAMN.",
-  "AT NUMBER ONE.",
-  "WELCOME, LITTLE WHITE BOY.",
-  "WELCOME TO WAKANDA. SURPRISINGLY T",
-};
+#include "subs.h"   /* sub_start / sub_end / sub_text / SUB_N - generated by tools/make_subs.py */
 
-static int g_sub_lang = 0;   /* 0 off, 1 english, 2 spanish (falls back to english: no Spanish track was supplied) */
+static int g_subs_on = 0;    /* subtitles on/off, toggled from the main menu */
 
 static char sub_label[24];
 static void update_sub_label(void) {
-    static const char *const names[3] = { "SUBTITLES OFF", "SUBTITLES EN", "SUBTITLES ES" };
-    int i = 0; for (const char *p = names[g_sub_lang]; *p; p++) sub_label[i++] = *p;
+    static const char *const names[2] = { "SUBTITLES OFF", "SUBTITLES ON" };
+    int i = 0; for (const char *p = names[g_subs_on]; *p; p++) sub_label[i++] = *p;
     sub_label[i] = 0;
 }
 
@@ -1011,7 +696,7 @@ static int menu(const char *const *items, int n, int allow_back) {
         if (hit & 0x40) sel = (sel + n - 1) % n;              /* up */
         if (hit & 0x80) sel = (sel + 1) % n;                  /* down */
         if ((hit & 0x09) && n == 4 && sel == 3) {             /* A/START on SUBTITLES: cycle, don't leave menu */
-            g_sub_lang = (g_sub_lang + 1) % 3;
+            g_subs_on ^= 1;
             update_sub_label();
             unpack_menu(VRAM_PAGE0, menu_bg[anim_seq[si]], 19200);
             unpack_menu(VRAM_PAGE1, menu_bg[anim_seq[si]], 19200);
@@ -1223,30 +908,64 @@ static void stop_audio(void) {
       black/white). Sprites use the separate OBJ palette bank instead, so the picture is untouched.
    2) sprites aren't page-based, so there's no stale-pixel residue when the video's own redraw
       doesn't happen to touch that screen row (that was the clutter/ghosting). */
-#define SUB_MAXCHARS 34                     /* matches the cap the subtitle table was authored to */
+#define SUB_COLS     34                     /* characters per line: 34 * 7px = 238px, fits the 240px screen */
+#define SUB_MAXLINES 3                      /* a cue may wrap onto up to 3 lines (tools/make_subs.py splits longer ones) */
+#define SUB_MAXSPR   (SUB_COLS * SUB_MAXLINES)   /* 102 of the 128 hardware sprites */
+#define SUB_LINE_H   9                      /* px between lines (8px glyph tile + 1px gap) */
+#define SUB_BASE_Y   148                    /* y of the last line (just under the video); earlier lines stack upward */
 static int g_sub_shown = -1;                /* cue index currently on screen, -1 = none */
 
 static void sub_hide(void) {
-    for (int i = 0; i < SUB_MAXCHARS; i++) OAM[i * 4] = 0x200;
+    for (int i = 0; i < SUB_MAXSPR; i++) OAM[i * 4] = 0x200;
     g_sub_shown = -1;
 }
 
-static void sub_show(const char *s) {
-    int len = 0; for (const char *p = s; *p; p++) len++;
-    int cx = 120 - (len * 7 - 1) / 2, y = 148, n = 0;
-    for (const char *p = s; *p; p++, cx += 7) {
-        if (*p == ' ') continue;
-        build_sub_letter_tile(n, *p);                       /* white fill (9) + black outline (10) */
-        OAM[n * 4]     = (u16)(y & 0xFF);
-        OAM[n * 4 + 1] = (u16)(cx & 0x1FF);
-        OAM[n * 4 + 2] = (u16)(512 + n);
-        n++;
+/* Split a cue into display lines. A '\n' in the text forces a break; otherwise a line is wrapped at
+   the last space that keeps it within SUB_COLS (a word longer than a line is hard-split). Returns the
+   number of lines (<= SUB_MAXLINES); anything that would need a further line is dropped. */
+static int sub_layout(const char *s, const char **ls, int *ll) {
+    int nl = 0;
+    while (nl < SUB_MAXLINES) {
+        while (*s == ' ') s++;
+        if (!*s) break;
+        int len = -1, brk = -1;
+        for (int i = 0; i <= SUB_COLS; i++) {
+            char c = s[i];
+            if (c == 0 || c == '\n') { len = i; break; }
+            if (c == ' ') brk = i;
+        }
+        if (len < 0) len = brk > 0 ? brk : SUB_COLS;       /* too long: wrap at the last space */
+        int keep = len;
+        while (keep > 0 && s[keep - 1] == ' ') keep--;       /* trim trailing spaces so centring is exact */
+        ls[nl] = s; ll[nl] = keep; nl++;
+        s += len;
+        if (*s == '\n') s++;
     }
-    for (int i = n; i < SUB_MAXCHARS; i++) OAM[i * 4] = 0x200;   /* hide any leftover slots */
+    return nl;
 }
 
-/* called every tick (not just when the video frame changes), so cue changes land within
-   1 vblank of their .srt timestamp instead of lagging behind the ~5fps frame redraw */
+static void sub_show(const char *s) {
+    const char *ls[SUB_MAXLINES]; int ll[SUB_MAXLINES];
+    int nl = sub_layout(s, ls, ll);
+    int n = 0;
+    for (int k = 0; k < nl; k++) {
+        int y = SUB_BASE_Y - (nl - 1 - k) * SUB_LINE_H;     /* last line sits on SUB_BASE_Y */
+        int cx = 120 - (ll[k] * 7 - 1) / 2;
+        for (int j = 0; j < ll[k]; j++, cx += 7) {
+            char ch = ls[k][j];
+            if (ch == ' ') continue;
+            build_sub_letter_tile(n, ch);                   /* white fill (9) + black outline (10) */
+            OAM[n * 4]     = (u16)(y & 0xFF);
+            OAM[n * 4 + 1] = (u16)(cx & 0x1FF);
+            OAM[n * 4 + 2] = (u16)(512 + n);
+            n++;
+        }
+    }
+    for (int i = n; i < SUB_MAXSPR; i++) OAM[i * 4] = 0x200;   /* hide any leftover slots */
+}
+
+/* called every tick (not just when the video frame changes), so a cue appears on the exact vblank of its
+   start tick instead of waiting for the next ~5fps frame redraw. t is the playback position in vblanks. */
 static void sub_update(u32 t) {
     int idx = -1;
     for (int i = 0; i < SUB_N; i++)
@@ -1266,7 +985,7 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
     g_sub_shown = -1;
     REG_BLDCNT = 0;     /* menu leaves alpha-blend on (translucent cursor) - kill it or subtitle
                            sprites get blended 5:11 against the video and end up nearly invisible */
-    if (use_subs && g_sub_lang) { OBJ_PAL[9] = 0x7FFF; OBJ_PAL[10] = 0x0000; }  /* subtitle white + black outline, OBJ bank0 */
+    if (use_subs && g_subs_on) { OBJ_PAL[9] = 0x7FFF; OBJ_PAL[10] = 0x0000; }  /* subtitle white + black outline, OBJ bank0 */
     REG_DISPCNT = 4 | (1 << 10) | (1 << 6) | (1 << 12);  /* BG2 + OBJ (1D mapping) */
 
     /* rate 1 = normal (5fps, vblanks/chunk=2); rate 2 = half-speed playback (2.5fps
@@ -1330,7 +1049,7 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
             fill_needed = 0;
             decode_chunk(abuf[play_idx]);
         }
-        if (use_subs && g_sub_lang) sub_update(t);     /* every tick - not gated on frame redraw */
+        if (use_subs && g_subs_on) sub_update(t);     /* every tick - not gated on frame redraw */
         unsigned f = (t * fps_num) >> 16;
         if (f >= count) f = count - 1;
         if ((int)f != drawn) {
