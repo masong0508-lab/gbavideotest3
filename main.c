@@ -631,14 +631,6 @@ static const char *const sub_text[SUB_N] = {
 
 static int g_sub_lang = 0;   /* 0 off, 1 english, 2 spanish (falls back to english: no Spanish track was supplied) */
 
-/* linear scan is fine: called a few times a second, table is tiny */
-static const char *sub_lookup(u32 t) {
-    if (!g_sub_lang) return 0;
-    for (int i = 0; i < SUB_N; i++)
-        if (t >= sub_start[i] && t < sub_end[i]) return sub_text[i];
-    return 0;
-}
-
 static char sub_label[24];
 static void update_sub_label(void) {
     static const char *const names[3] = { "SUBTITLES OFF", "SUBTITLES EN", "SUBTITLES ES" };
@@ -1196,15 +1188,56 @@ static void stop_audio(void) {
 
 #define SEEK_STEP 4                         /* ticks (vblanks) per frame while seeking = 4x speed */
 
+/* Subtitles are drawn as OBJ sprites, not baked into the video's BG pixels. Two reasons:
+   1) the video's BG palette is the real picture's 256 colours - stomping indices 254/255 for
+      text (as an earlier version did) silently recolours any video pixel that legitimately
+      used those two indices (that's the "missing pixel" - it was never missing, just forced
+      black/white). Sprites use the separate OBJ palette bank instead, so the picture is untouched.
+   2) sprites aren't page-based, so there's no stale-pixel residue when the video's own redraw
+      doesn't happen to touch that screen row (that was the clutter/ghosting). */
+#define SUB_MAXCHARS 34                     /* matches the cap the subtitle table was authored to */
+static int g_sub_shown = -1;                /* cue index currently on screen, -1 = none */
+
+static void sub_hide(void) {
+    for (int i = 0; i < SUB_MAXCHARS; i++) OAM[i * 4] = 0x200;
+    g_sub_shown = -1;
+}
+
+static void sub_show(const char *s) {
+    int len = 0; for (const char *p = s; *p; p++) len++;
+    int cx = 120 - (len * 7 - 1) / 2, y = 148, n = 0;
+    for (const char *p = s; *p; p++, cx += 7) {
+        if (*p == ' ') continue;
+        build_letter_tile(n, *p, 9);                       /* OBJ bank0 colour 9 = subtitle white */
+        OAM[n * 4]     = (u16)(y & 0xFF);
+        OAM[n * 4 + 1] = (u16)(cx & 0x1FF);
+        OAM[n * 4 + 2] = (u16)(512 + n);
+        n++;
+    }
+    for (int i = n; i < SUB_MAXCHARS; i++) OAM[i * 4] = 0x200;   /* hide any leftover slots */
+}
+
+/* called every tick (not just when the video frame changes), so cue changes land within
+   1 vblank of their .srt timestamp instead of lagging behind the ~5fps frame redraw */
+static void sub_update(u32 t) {
+    int idx = -1;
+    for (int i = 0; i < SUB_N; i++)
+        if (t >= sub_start[i] && t < sub_end[i]) { idx = i; break; }
+    if (idx == g_sub_shown) return;
+    if (idx < 0) sub_hide();
+    else { sub_show(sub_text[idx]); g_sub_shown = idx; }
+}
+
 static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned count,
                           const u16 *pal, const u8 *audio_base, u32 nchunks, u32 rate, const u32 *states,
                           int use_subs) {
     REG_IME = 0;
-    for (int i = 0; i < 256; i++) PALETTE[i] = pal[i];
-    if (use_subs) { PALETTE[254] = 0; PALETTE[255] = 0x7FFF; }  /* sacrifice 2 of 256 video colours for sub text */
+    for (int i = 0; i < 256; i++) PALETTE[i] = pal[i];   /* video's real 256-colour palette, untouched */
     for (int i = 0; i < 19200; i++) VRAM_PAGE0[i] = 0;
     for (int i = 0; i < 128; i++) OAM[i * 4] = 0x200;
-    REG_DISPCNT = 4 | (1 << 10);
+    g_sub_shown = -1;
+    if (use_subs && g_sub_lang) OBJ_PAL[9] = 0x7FFF;     /* white, OBJ bank0 - separate from BG palette */
+    REG_DISPCNT = 4 | (1 << 10) | (1 << 6) | (1 << 12);  /* BG2 + OBJ (1D mapping) */
 
     /* rate 1 = normal (5fps, vblanks/chunk=2); rate 2 = half-speed playback (2.5fps
        equivalent hold time, vblanks/chunk=4) for a stream whose source was sped up
@@ -1260,26 +1293,19 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
 
         if (pending) {
             page ^= 1;
-            REG_DISPCNT = 4 | (1 << 10) | (page << 4);
+            REG_DISPCNT = 4 | (1 << 10) | (1 << 6) | (1 << 12) | (page << 4);
             pending = 0;
         }
         if (mode == 0 && fill_needed) {
             fill_needed = 0;
             decode_chunk(abuf[play_idx]);
         }
+        if (use_subs && g_sub_lang) sub_update(t);     /* every tick - not gated on frame redraw */
         unsigned f = (t * fps_num) >> 16;
         if (f >= count) f = count - 1;
         if ((int)f != drawn) {
             decode_frame(fr_start, idx[f], idx[f + 1]);
             draw_frame(frame_buf, page ? VRAM_PAGE0 : VRAM_PAGE1);
-            if (use_subs) {
-                const char *s = sub_lookup(t);
-                if (s) {
-                    g_page = page ? VRAM_PAGE0 : VRAM_PAGE1;
-                    text(120 - text_w(s) / 2, 148, s);
-                    g_page = VRAM_PAGE0;
-                }
-            }
             drawn = (int)f;
             pending = 1;
         }
