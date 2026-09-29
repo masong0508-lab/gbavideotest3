@@ -114,8 +114,18 @@ extern const u8  frames_start[], frames_end[];
 extern const u32 frames_idx_start[], frames_idx_end[];
 extern const u16 palette_data[256];
 extern const u8  audio_start[], audio_end[];
-extern const u16 menu_bg[19200];
-extern const u16 menu_pal[256];
+extern const u8  menu_bg[3][19200];     /* 3 menu frames, shown 0,1,2,1,0,... ; 4 bits/pixel, low nibble = left pixel */
+extern const u16 menu_pal[3][16];       /* 16-colour palette per frame (254/255 are added at runtime) */
+
+/* set BG palette entries 0-15 to menu frame k, plus the reserved text colours */
+static void set_menu_pal(int k) {
+    for (int i = 0; i < 16; i++) PALETTE[i] = menu_pal[k][i];
+    PALETTE[254] = 0; PALETTE[255] = 0x7FFF;
+}
+/* unpack `n` u16 of 4bpp menu art (n bytes of source) into Mode 4 VRAM */
+static void unpack_menu(volatile u16 *dst, const u8 *src, int n) {
+    for (int i = 0; i < n; i++) { u8 b = src[i]; dst[i] = (u16)((b & 15) | ((b >> 4) << 8)); }
+}
 extern const u16 secret_bg[19200];
 extern const u16 secret_pal[256];
 extern const u8  vid2_frames_start[], vid2_frames_end[];
@@ -280,9 +290,9 @@ static void text(int x, int y, const char *s) {
 
 static void menu_setup(void) {
     REG_IME = 0;
-    for (int i = 0; i < 256; i++) PALETTE[i] = menu_pal[i];
+    set_menu_pal(0);
     REG_DISPCNT = 4 | (1 << 10);
-    for (int i = 0; i < 19200; i++) VRAM_PAGE0[i] = menu_bg[i];
+    unpack_menu(VRAM_PAGE0, menu_bg[0], 19200);
     for (int i = 0; i < 128; i++) OAM[i * 4] = 0x200;      /* hide all sprites */
 }
 
@@ -497,14 +507,18 @@ static void big_text(int x, int y, const char *s) {
 }
 
 /* Returns the Mode 4 page (0/1) that is on screen when the music ends. */
-static int secret(void) {
+static int secret(int menu_frame) {
     int o1 = OBJ_PAL[1], o2 = OBJ_PAL[2];
+    static u16 curpal[256];                       /* the menu frame's palette, expanded for fading */
+    for (int i = 0; i < 256; i++) curpal[i] = 0;
+    for (int i = 0; i < 16; i++) curpal[i] = menu_pal[menu_frame][i];
+    curpal[255] = 0x7FFF;
     rng_state = 0x9E3779B9u ^ ((u32)REG_VCOUNT << 8) ^ ((u32)REG_TM0CNT_L << 16);
 
     /* 1. fade the menu (background + highlight sprite) out */
     for (int l = FADE_N - 1; l >= 0; l--) {
         wait_vb();
-        fade_pal(menu_pal, l);
+        fade_pal(curpal, l);
         OBJ_PAL[1] = shade_col((u16)o1, l);
         OBJ_PAL[2] = shade_col((u16)o2, l);
     }
@@ -567,10 +581,36 @@ static int menu(const char *const *items, int allow_back) {
     /* Altered code: D D U U L R L R B A, triggers the easter-egg clip */
     static const u16 konami2[10] = { 0x80, 0x80, 0x40, 0x40, 0x20, 0x10, 0x20, 0x10, 0x02, 0x01 };
     int ki = 0, ki2 = 0;
+    /* Background animation: frames 0,1,2,1 repeat, 30 vblanks (0.5 s) each. The next frame is
+       built on the hidden page a slice per vblank, then palette + page are swapped at the
+       start of a vblank, so the change is instant and never flickers or stalls input. */
+    static const u8 anim_seq[4] = { 0, 1, 2, 1 };
+    int mp = 0, si = 0, ac = 0, prep = 0;
     u16 prev = (u16)(~REG_KEYINPUT & 0x3FF);
     for (;;) {
         wait_vb();
         place_hl(sel);
+        {
+            int ni = anim_seq[(si + 1) & 3];
+            if (ac < 30) ac++;
+            if (ac >= 30 && prep == 5) {
+                set_menu_pal(ni);
+                mp ^= 1;
+                REG_DISPCNT = 4 | (1 << 10) | (1 << 6) | (1 << 12) | (mp << 4);
+                si = (si + 1) & 3; ac = 0; prep = 0;
+                ni = anim_seq[(si + 1) & 3];
+            }
+            volatile u16 *back = mp ? VRAM_PAGE0 : VRAM_PAGE1;
+            if (prep < 4) {
+                unpack_menu(back + prep * 4800, menu_bg[ni] + prep * 4800, 4800);
+                prep++;
+            } else if (prep == 4) {
+                g_page = back;
+                for (int i = 0; i < 3; i++) text(COL_CX - text_w(items[i]) / 2, ROW_Y(i) - 3, items[i]);
+                g_page = VRAM_PAGE0;
+                prep = 5;
+            }
+        }
         u16 k = (u16)(~REG_KEYINPUT & 0x3FF);
         u16 hit = k & ~prev;
         prev = k;
@@ -580,17 +620,18 @@ static int menu(const char *const *items, int allow_back) {
             if (ki == 10) {
                 /* secret screen; when its music ends, cut straight back to this menu:
                    draw it on the hidden page, then swap palette + page inside one vblank */
-                int shown = secret();
+                int shown = secret(anim_seq[si]);
                 volatile u16 *back = shown ? VRAM_PAGE0 : VRAM_PAGE1;
-                for (int i = 0; i < 19200; i++) back[i] = menu_bg[i];
+                unpack_menu(back, menu_bg[0], 19200);
                 g_page = back;
                 for (int i = 0; i < 3; i++) text(COL_CX - text_w(items[i]) / 2, ROW_Y(i) - 3, items[i]);
                 g_page = VRAM_PAGE0;
                 make_highlight();
                 place_hl(sel);
                 wait_vb();
-                for (int i = 0; i < 256; i++) PALETTE[i] = menu_pal[i];
+                set_menu_pal(0);
                 REG_DISPCNT = 4 | (1 << 10) | (1 << 6) | (1 << 12) | ((shown ^ 1) << 4);
+                mp = shown ^ 1; si = 0; ac = 0; prep = 0;     /* animation restarts at frame 0 */
                 ki = ki2 = 0;
                 prev = (u16)(~REG_KEYINPUT & 0x3FF);
                 continue;
