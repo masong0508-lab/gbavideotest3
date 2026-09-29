@@ -1050,6 +1050,34 @@ static void build_letter_tile(int idx, char c, int pal) {
     }
 }
 
+/* Subtitle-only glyph builder: bakes a black outline (pal 10) behind the white
+   fill (pal 9) into the SAME tile, offset by 1px down-right - same bold trick
+   text() uses on the menu (shadow pass, then fill pass). Plain white-only glyphs
+   disappear against light video frames (sky, fur, skin); plain black would just
+   fail the same way on dark frames. Outlined text reads on either. */
+static void build_sub_letter_tile(int idx, char c) {
+    const u8 *g = glyph(c);
+    u8 px[8][8];
+    for (int r = 0; r < 8; r++) for (int cc = 0; cc < 8; cc++) px[r][cc] = 0;
+    if (g) {
+        for (int col = 0; col < 5; col++)
+            for (int row = 0; row < 7; row++)
+                if ((g[col] >> row) & 1) {
+                    px[row + 1][col + 1] = 10;             /* shadow, drawn first */
+                }
+        for (int col = 0; col < 5; col++)
+            for (int row = 0; row < 7; row++)
+                if ((g[col] >> row) & 1) {
+                    px[row][col] = 9;                      /* fill, overwrites any shadow under it */
+                }
+    }
+    for (int r = 0; r < 8; r++) {
+        u32 w = 0;
+        for (int cc = 0; cc < 8; cc++) w |= (u32)px[r][cc] << (4 * cc);
+        OBJ_TILES[idx * 8 + r] = w;
+    }
+}
+
 static void title_intro(void) {
     static const char title[] = "TOP 10 ANIMOMENTS !!!!";
     int fx[INTRO_N], fy[INTRO_N];    /* final, exact positions */
@@ -1208,7 +1236,7 @@ static void sub_show(const char *s) {
     int cx = 120 - (len * 7 - 1) / 2, y = 148, n = 0;
     for (const char *p = s; *p; p++, cx += 7) {
         if (*p == ' ') continue;
-        build_letter_tile(n, *p, 9);                       /* OBJ bank0 colour 9 = subtitle white */
+        build_sub_letter_tile(n, *p);                       /* white fill (9) + black outline (10) */
         OAM[n * 4]     = (u16)(y & 0xFF);
         OAM[n * 4 + 1] = (u16)(cx & 0x1FF);
         OAM[n * 4 + 2] = (u16)(512 + n);
@@ -1238,7 +1266,7 @@ static void play_generic(u32 st, const u8 *fr_start, const u32 *idx, unsigned co
     g_sub_shown = -1;
     REG_BLDCNT = 0;     /* menu leaves alpha-blend on (translucent cursor) - kill it or subtitle
                            sprites get blended 5:11 against the video and end up nearly invisible */
-    if (use_subs && g_sub_lang) OBJ_PAL[9] = 0x7FFF;     /* white, OBJ bank0 - separate from BG palette */
+    if (use_subs && g_sub_lang) { OBJ_PAL[9] = 0x7FFF; OBJ_PAL[10] = 0x0000; }  /* subtitle white + black outline, OBJ bank0 */
     REG_DISPCNT = 4 | (1 << 10) | (1 << 6) | (1 << 12);  /* BG2 + OBJ (1D mapping) */
 
     /* rate 1 = normal (5fps, vblanks/chunk=2); rate 2 = half-speed playback (2.5fps
