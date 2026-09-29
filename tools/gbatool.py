@@ -5,6 +5,7 @@ gbatool.py - asset converter for the GBA video-player template.
 Sub-commands
   video    <input.mp4> [--slot main|secret]   video+audio -> frames/palette/audio .bin
   bg       <image.png> --slot menu|secret     any image   -> 240x160 background .bin + palette
+  states                                      rebuild the per-chunk ADPCM state tables from the existing audio .bin files
   placeholders                                regenerate the built-in test assets
 
 Needs: python3, Pillow, numpy, and ffmpeg on PATH (ffmpeg only for `video`).
@@ -77,6 +78,24 @@ def adpcm_decode(data):
             sidx = max(0, min(88, sidx + IDX[nib & 7]))
             out.append(pred >> 8)
     return out
+
+def adpcm_states(ab):
+    """Decoder state at the start of every chunk -> u32 each: pred(s16) | sidx<<16.
+    main.c loads this after a seek so the audio resumes bit-exactly as if it had played on."""
+    pred = 0; sidx = 0; out = []
+    for c in range(len(ab) // CHUNK_BYTES):
+        out.append((pred & 0xFFFF) | (sidx << 16))
+        for b in ab[c * CHUNK_BYTES:(c + 1) * CHUNK_BYTES]:
+            for nib in (b & 15, b >> 4):
+                step = STEP[sidx]; diff = step >> 3
+                if nib & 1: diff += step >> 2
+                if nib & 2: diff += step >> 1
+                if nib & 4: diff += step
+                pred = pred - diff if nib & 8 else pred + diff
+                pred -= pred >> 9
+                pred = max(-32768, min(32767, pred))
+                sidx = max(0, min(88, sidx + IDX[nib & 7]))
+    return struct.pack(f'<{len(out)}I', *out)
 
 def chunks_for_frames(nframes):
     vblanks = math.ceil(nframes * FPS_DEN / FPS_NUM)
@@ -183,12 +202,14 @@ def ffmpeg_audio(path, gain):
 # ---------------------------------------------------------------- commands
 SLOTS = {'main': ('frames', 'frames_idx.bin', 'palette.bin', 'audio.bin'),
          'secret': ('vid2_frames', 'vid2_frames_idx.bin', 'vid2_palette.bin', 'vid2_audio.bin')}
+STATE_FILES = {'main': ('audio.bin', 'audio_state.bin'), 'secret': ('vid2_audio.bin', 'vid2_audio_state.bin')}
 
 def build_video(frames, pcm, slot, dither):
     fstem, iname, pname, aname = SLOTS[slot]
     fb, ib, pb = encode_frames(frames, dither)
     ab = encode_audio(pcm, len(frames))
     write_frames_split(fstem, fb); write(iname, ib); write(pname, pb); write(aname, ab)
+    write(STATE_FILES[slot][1], adpcm_states(ab))
     secs = len(frames) / 5
     raw = len(frames) * FRAME_BYTES
     print(f'  {len(frames)} frames = {secs:.1f} s ({secs/60:.1f} min), {len(ab)//CHUNK_BYTES} audio chunks')
@@ -257,6 +278,12 @@ def test_audio(nframes, hz):
     env = ((t % 1.0) < 0.12) * 0.25                          # short quiet beep at the start of every second
     return (np.sin(2 * math.pi * hz * t) * env * 32767).astype(np.int16)
 
+def cmd_states(a):
+    """Rebuild audio_state.bin / vid2_audio_state.bin from the existing audio .bin files (no source video needed)."""
+    for src, dst in STATE_FILES.values():
+        p = os.path.join(ROOT, src)
+        if os.path.exists(p): write(dst, adpcm_states(open(p, 'rb').read()))
+
 def cmd_placeholders(a):
     print('placeholder assets:')
     os.makedirs(os.path.join(ROOT, 'assets_src'), exist_ok=True)
@@ -282,6 +309,7 @@ def main():
     b.add_argument('--dither', action='store_true')
     b.set_defaults(fn=cmd_bg)
     p = sub.add_parser('placeholders'); p.set_defaults(fn=cmd_placeholders)
+    st = sub.add_parser('states'); st.set_defaults(fn=cmd_states)
     a = ap.parse_args(); a.fn(a)
 
 if __name__ == '__main__':
