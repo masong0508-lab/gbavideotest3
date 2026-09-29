@@ -114,6 +114,12 @@ __asm__(
     ".incbin \"secret_audio.bin\"\n"
     ".global secret_audio_end\nsecret_audio_end:\n"
     ".balign 4\n"
+    ".global egg_tiles\negg_tiles:\n"                 /* face sprite for the secret-screen finale (egg.h) */
+    ".incbin \"egg_tiles.bin\"\n"
+    ".balign 4\n"
+    ".global egg_pal\negg_pal:\n"
+    ".incbin \"egg_pal.bin\"\n"
+    ".balign 4\n"
     ".text\n"
 );
 extern const u8  frames_start[], frames_end[];
@@ -518,6 +524,8 @@ static void big_text(int x, int y, const char *s) {
     }
 }
 
+#include "egg.h"      /* scaling face sprite: keyframes + OAM driver */
+
 /* Returns the Mode 4 page (0/1) that is on screen when the music ends. */
 static int secret(int menu_frame) {
     int o1 = OBJ_PAL[1], o2 = OBJ_PAL[2];
@@ -537,6 +545,8 @@ static int secret(int menu_frame) {
     for (int i = 0; i < 128; i++) OAM[i * 4] = 0x200;
     REG_DISPCNT = 4 | (1 << 10);
     OBJ_PAL[1] = (u16)o1; OBJ_PAL[2] = (u16)o2;
+    REG_BLDCNT = 0;                               /* face sprite must be opaque (menu re-enables blending) */
+    egg_load();                                   /* face tiles + palette into OBJ VRAM */
 
     /* 2. build the picture on both pages while everything is black */
     for (int i = 0; i < 256; i++) sec_pal[i] = secret_pal[i];
@@ -551,19 +561,25 @@ static int secret(int menu_frame) {
     g_once = 1;
     start_audio(0, secret_audio_start, SECRET_NCHUNKS, 2, 0);
     u32 last = 0, ldraw = 0;
-    int page = 0, pending = 0, fade = 0;
+    int page = 0, pending = 0, fade = 0, bgfade = FADE_N;
+    const int t_end = (int)(2 * SECRET_NCHUNKS + 2);  /* vblank on which the IRQ flags the end of the music */
     u16 prev = (u16)(~REG_KEYINPUT & 0x3FF);
     for (;;) {
         while (tick == last && !g_done) {}
         if (g_done) break;                            /* IRQ flags the exact vblank the music ends */
         last = tick;
+        egg_update((int)last - t_end);                /* face sprite keyframes, right at the top of vblank */
         if (SECRET_SKIPPABLE) {
             u16 k = (u16)(~REG_KEYINPUT & 0x3FF);
             u16 hit = k & ~prev; prev = k;
             if (hit) break;
         }
-        if (pending) { page ^= 1; REG_DISPCNT = 4 | (1 << 10) | (page << 4); pending = 0; }
+        if (pending) { page ^= 1; REG_DISPCNT = 4 | (1 << 10) | EGG_DISP | (page << 4); pending = 0; }
         if (fade < FADE_N) { fade++; fade_pal(sec_pal, fade); }
+        else {                                        /* picture goes dark behind the full-screen face */
+            int lv = egg_fade_level((int)last - t_end, FADE_N);
+            if (lv != bgfade) { bgfade = lv; fade_pal(sec_pal, lv); }
+        }
         if (fill_needed) { fill_needed = 0; decode_chunk(abuf[play_idx]); }
         if (last - ldraw >= 2) {
             ldraw = last;
@@ -639,10 +655,17 @@ static int menu(const char *const *items, int allow_back) {
                 for (int i = 0; i < 3; i++) text(COL_CX - text_w(items[i]) / 2, ROW_Y(i) - 3, items[i]);
                 g_page = VRAM_PAGE0;
                 make_highlight();
-                place_hl(sel);
+                REG_BLDCNT = 0;                               /* the face is still on screen: keep it opaque */
                 wait_vb();
                 set_menu_pal(0);
                 REG_DISPCNT = 4 | (1 << 10) | (1 << 6) | (1 << 12) | ((shown ^ 1) << 4);
+                for (int n = 1; n <= EGG_SLIDE_TICKS; n++) {  /* menu is live underneath: face slides off */
+                    wait_vb();
+                    egg_update(n);
+                }
+                egg_hide();
+                REG_BLDCNT = 0x0450;                          /* back to the menu's translucent highlight */
+                place_hl(sel);
                 mp = shown ^ 1; si = 0; ac = 0; prep = 0;     /* animation restarts at frame 0 */
                 ki = ki2 = 0;
                 prev = (u16)(~REG_KEYINPUT & 0x3FF);
